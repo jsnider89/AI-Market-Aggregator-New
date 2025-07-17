@@ -1,75 +1,85 @@
 name: AI Market Intelligence (Refactored)
 
 on:
-  schedule:
-    # Runs at 6:30 AM MST (12:30 PM UTC) every day
-    - cron: '30 12 * * *'
-    # Runs at 5:30 PM MST (11:30 PM UTC) every day  
-    - cron: '30 23 * * *'
-  workflow_dispatch:  # Allows manual trigger
+schedule:
+# Runs at 6:30 AM MST (12:30 PM UTC) every day
+- cron: ‘30 12 * * *’
+# Runs at 5:30 PM MST (11:30 PM UTC) every day  
+- cron: ‘30 23 * * *’
+workflow_dispatch:  # Allows manual trigger
 
 jobs:
-  market-intelligence:
-    runs-on: ubuntu-latest
+market-intelligence:
+runs-on: ubuntu-latest
+
+```
+steps:
+- name: Checkout repository
+  uses: actions/checkout@v4  # Updated to v4
+
+- name: Set up Python
+  uses: actions/setup-python@v4
+  with:
+    python-version: '3.11'  # Updated to 3.11 for better performance
+
+- name: Install dependencies
+  run: |
+    python -m pip install --upgrade pip
+    pip install -r requirements.txt
+
+- name: Validate environment
+  env:
+    # Need to pass secrets to validation step too!
+    SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+    SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+    RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+    FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  run: |
+    echo "🔍 Validating environment configuration..."
+    python -c "
+    import os
+    required = ['SENDER_EMAIL', 'SENDER_PASSWORD', 'RECIPIENT_EMAIL', 'FINNHUB_API_KEY']
+    ai_keys = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'] 
     
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v4  # Updated to v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.11'  # Updated to 3.11 for better performance
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    
-    - name: Validate environment
-      run: |
-        echo "🔍 Validating environment configuration..."
-        python -c "
-        import os
-        required = ['SENDER_EMAIL', 'SENDER_PASSWORD', 'RECIPIENT_EMAIL', 'FINNHUB_API_KEY']
-        ai_keys = ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY'] 
+    missing = [var for var in required if not os.getenv(var)]
+    if missing:
+        print(f'❌ Missing required vars: {missing}')
+        exit(1)
         
-        missing = [var for var in required if not os.getenv(var)]
-        if missing:
-            print(f'❌ Missing required vars: {missing}')
-            exit(1)
-            
-        ai_available = any(os.getenv(key) for key in ai_keys)
-        if not ai_available:
-            print(f'❌ No AI API keys found. Need one of: {ai_keys}')
-            exit(1)
-            
-        print('✅ Environment validation passed')
-        "
-    
-    - name: Run Market Intelligence Analysis
-      env:
-        # Email Configuration
-        SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
-        SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
-        RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
+    ai_available = any(os.getenv(key) for key in ai_keys)
+    if not ai_available:
+        print(f'❌ No AI API keys found. Need one of: {ai_keys}')
+        exit(1)
         
-        # API Keys
-        FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
-        OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
-        ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-      run: |
-        echo "🚀 Starting AI Market Intelligence Analysis..."
-        echo "📊 Using refactored modular architecture"
-        echo "🔒 Security-hardened with proper input validation"
-        python market_intelligence_main.py
+    print('✅ Environment validation passed')
+    "
+
+- name: Run Market Intelligence Analysis
+  env:
+    # Email Configuration
+    SENDER_EMAIL: ${{ secrets.SENDER_EMAIL }}
+    SENDER_PASSWORD: ${{ secrets.SENDER_PASSWORD }}
+    RECIPIENT_EMAIL: ${{ secrets.RECIPIENT_EMAIL }}
     
-    - name: Log completion
-      if: always()  # Run even if previous step fails
-      run: |
-        if [ $? -eq 0 ]; then
-          echo "✅ AI Market Intelligence completed successfully at $(date)"
-        else
-          echo "❌ AI Market Intelligence failed at $(date)"
-          echo "Check logs above for error details"
-        fi
+    # API Keys
+    FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
+    OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+  run: |
+    echo "🚀 Starting AI Market Intelligence Analysis..."
+    echo "📊 Using refactored modular architecture"
+    echo "🔒 Security-hardened with proper input validation"
+    python market_intelligence_main.py
+
+- name: Log completion
+  if: always()  # Run even if previous step fails
+  run: |
+    if [ $? -eq 0 ]; then
+      echo "✅ AI Market Intelligence completed successfully at $(date)"
+    else
+      echo "❌ AI Market Intelligence failed at $(date)"
+      echo "Check logs above for error details"
+    fi
+```
