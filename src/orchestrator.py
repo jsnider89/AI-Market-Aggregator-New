@@ -119,6 +119,7 @@ Present the market data with analysis of notable movements and patterns. For eac
 - Change in dollars
 - Change in percentage
 - Use 🟢 for positive changes and 🔴 for negative changes
+- NOTE - Do not provide a summary of each market symbol. Only do the overarching market summary using the analyzed price movement as a source.
 
 **SECTION 2 - TOP MARKET & ECONOMY STORIES (5 stories):**
 Use pattern recognition to identify the 5 most significant market/economy stories based on:
