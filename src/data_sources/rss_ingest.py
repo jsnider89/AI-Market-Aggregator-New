@@ -1,6 +1,9 @@
 # src/data_sources/rss_ingest.py
 import feedparser
 import requests
+import json
+import os
+from pathlib import Path
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple
 import logging
@@ -10,35 +13,12 @@ logger = logging.getLogger("market_aggregator.rss")
 class RSSIngest:
     """
     Handles RSS feed ingestion using proper feedparser library
-    instead of fragile regex parsing
+    Now reads feed configuration from feeds_config.json
     """
     
-    def __init__(self):
-        self.feeds = [
-            ('Federal Reserve - Commercial Paper', 'https://www.federalreserve.gov/feeds/Data/CP_OUTST.xml'),
-            ('Federal Reserve - Press Monetary', 'https://www.federalreserve.gov/feeds/press_monetary.xml'),
-            ('Fox News Latest', 'https://feeds.feedburner.com/foxnews/latest'),
-            ('The Hill Home News', 'https://thehill.com/homenews/feed/'),
-            ('Daily Caller', 'https://dailycaller.com/feed/'),
-            ('Daily Wire', 'https://www.dailywire.com/feeds/rss.xml'),
-            ('The Blaze', 'https://www.theblaze.com/feeds/feed.rss'),
-            ('News Busters', 'https://newsbusters.org/blog/feed'),
-            ('Daily Signal', 'https://www.dailysignal.com/feed'),
-            ('Newsmax Headlines', 'https://www.newsmax.com/rss/Headline/76'),
-            ('Newsmax Finance', 'https://www.newsmax.com/rss/FinanceNews/4'),
-            ('Newsmax Economy', 'https://www.newsmax.com/rss/Economy/2'),
-            ('Newsmax World', 'https://www.newsmax.com/rss/GlobalTalk/162'),
-            ('Newsmax US', 'https://www.newsmax.com/rss/US/18'),
-            ('Newsmax Tech', 'https://www.newsmax.com/rss/SciTech/20'),
-            ('Newsmax Wire', 'https://www.newsmax.com/rss/TheWire/118'),
-            ('Newsmax Politics', 'https://www.newsmax.com/rss/Politics/1'),
-            ('MarketWatch Top Stories', 'https://feeds.content.dowjones.io/public/rss/mw_topstories'),
-            ('MarketWatch Real-time', 'https://feeds.content.dowjones.io/public/rss/mw_realtimeheadlines'),
-            ('MarketWatch Market Pulse', 'https://feeds.content.dowjones.io/public/rss/mw_marketpulse'),
-            ('CNBC Markets', 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664'),
-            ('CNBC Finance', 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=20910258'),
-            ('CNBC Economy', 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910')
-        ]
+    def __init__(self, config_file: str = "feeds_config.json"):
+        self.config_file = config_file
+        self.load_config()
         
         self.session = requests.Session()
         # Use a more realistic browser User-Agent to avoid blocking
@@ -52,13 +32,67 @@ class RSSIngest:
             'Upgrade-Insecure-Requests': '1'
         })
 
-    def parse_single_feed(self, source_name: str, feed_url: str, max_articles: int = 5) -> Tuple[str, List[Dict]]:
+    def load_config(self):
+        """Load RSS feeds configuration from JSON file"""
+        try:
+            # Look for config file in the root directory
+            config_path = Path(self.config_file)
+            if not config_path.exists():
+                logger.warning(f"Config file {self.config_file} not found, using fallback feeds")
+                self._use_fallback_config()
+                return
+            
+            with open(config_path, 'r') as f:
+                config_data = json.load(f)
+            
+            # Extract enabled feeds only
+            self.feeds = []
+            for feed in config_data.get('rss_feeds', []):
+                if feed.get('enabled', True):  # Default to enabled if not specified
+                    self.feeds.append((feed['name'], feed['url']))
+            
+            # Load configuration settings
+            self.config = config_data.get('config', {})
+            self.max_articles = self.config.get('max_articles_per_feed', 5)
+            self.default_timeout = self.config.get('default_timeout', 15)
+            self.newsmax_timeout = self.config.get('newsmax_timeout', 10)
+            self.rate_limit_delay = self.config.get('rate_limit_delay', 2)
+            
+            logger.info(f"Loaded {len(self.feeds)} enabled feeds from {self.config_file}")
+            
+        except Exception as e:
+            logger.error(f"Error loading config file {self.config_file}: {e}")
+            logger.info("Using fallback configuration")
+            self._use_fallback_config()
+
+    def _use_fallback_config(self):
+        """Fallback configuration if config file is not available"""
+        self.feeds = [
+            ('Federal Reserve - Press Monetary', 'https://www.federalreserve.gov/feeds/press_monetary.xml'),
+            ('Fox News Latest', 'https://feeds.feedburner.com/foxnews/latest'),
+            ('The Hill Home News', 'https://thehill.com/homenews/feed/'),
+            ('MarketWatch Top Stories', 'https://feeds.content.dowjones.io/public/rss/mw_topstories'),
+            ('CNBC Markets', 'https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=10000664')
+        ]
+        
+        # Default config values
+        self.max_articles = 5
+        self.default_timeout = 15
+        self.newsmax_timeout = 10
+        self.rate_limit_delay = 2
+        
+        logger.info(f"Using fallback configuration with {len(self.feeds)} feeds")
+
+    def parse_single_feed(self, source_name: str, feed_url: str, max_articles: int = None) -> Tuple[str, List[Dict]]:
         """
         Parse a single RSS feed using feedparser (much more reliable than regex)
         
         Returns:
             Tuple of (status_message, list_of_articles)
         """
+        if max_articles is None:
+            max_articles = self.max_articles
+            
         try:
             logger.info(f"Fetching feed: {source_name}")
             
@@ -70,11 +104,11 @@ class RSSIngest:
             domain = urllib.parse.urlparse(feed_url).netloc
             if 'newsmax.com' in domain:
                 # Extra delay for Newsmax since they seem to be rate limiting
-                time.sleep(2)
+                time.sleep(self.rate_limit_delay)
                 # Shorter timeout for known problematic feeds
-                timeout = 10
+                timeout = self.newsmax_timeout
             else:
-                timeout = 15
+                timeout = self.default_timeout
             
             # Fetch the feed with appropriate timeout
             response = self.session.get(feed_url, timeout=timeout)
