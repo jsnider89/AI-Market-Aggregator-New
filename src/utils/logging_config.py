@@ -40,7 +40,7 @@ def validate_environment() -> dict:
     required_vars = {
         'email': ['SENDER_EMAIL', 'SENDER_PASSWORD', 'RECIPIENT_EMAIL'],
         'apis': ['FINNHUB_API_KEY'],
-        'ai': ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY']  # At least one required
+        'ai': ['OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'GEMINI_API_KEY']  # At least one required
     }
     
     missing = {}
