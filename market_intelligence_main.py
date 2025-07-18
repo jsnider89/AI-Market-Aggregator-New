@@ -26,7 +26,7 @@ def main():
     """
     try:
         # Import the orchestrator
-        from orchestrator import MarketIntelligenceOrchestrator
+        from src.orchestrator import MarketIntelligenceOrchestrator
         
         # Initialize and run the analysis
         orchestrator = MarketIntelligenceOrchestrator()
