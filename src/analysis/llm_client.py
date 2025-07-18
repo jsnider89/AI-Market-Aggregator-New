@@ -196,7 +196,7 @@ class GeminiProvider(AIProvider):
             'Content-Type': 'application/json'
         })
         
-        # Gemini 2.0 Flash model endpoint
+        # Gemini 2.5 Flash model endpoint
         self.model = "gemini-2.5-flash"
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
         
@@ -222,7 +222,7 @@ class GeminiProvider(AIProvider):
                     "temperature": 0.7,
                     "topK": 40,
                     "topP": 0.95,
-                    "maxOutputTokens": 8000,
+                    "maxOutputTokens": 4000,
                     "candidateCount": 1
                 },
                 "safetySettings": [
@@ -305,7 +305,7 @@ class GeminiProvider(AIProvider):
             return None
 
     def get_provider_name(self) -> str:
-        return "Google Gemini 2.0 Flash"
+        return "Google Gemini 2.5 Flash"
 
 class AIClient:
     """
@@ -316,11 +316,11 @@ class AIClient:
         self.providers = []
         
         # Try to initialize providers based on available API keys
-        # Prioritize Gemini 2.0 Flash if available (faster and potentially cheaper)
+        # Prioritize Gemini 2.5 Flash if available (faster and potentially cheaper)
         if os.getenv('GEMINI_API_KEY'):
             try:
                 self.providers.append(GeminiProvider())
-                logger.info("Gemini provider added (prioritized)")
+                logger.info("Gemini 2.5 Flash provider added (prioritized)")
             except Exception as e:
                 logger.warning(f"Failed to initialize Gemini provider: {e}")
         
