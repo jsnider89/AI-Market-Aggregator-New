@@ -15,7 +15,7 @@ class MarketDataClient:
     def __init__(self):
         self.api_key = os.getenv('FINNHUB_API_KEY')
         self.base_url = "https://finnhub.io/api/v1"
-        self.symbols = ['QQQ', 'SPY', 'UUP', 'IWM', 'GLD', 'DXY', 'MP']
+        self.symbols = ['QQQ', 'SPY', 'UUP', 'IWM', 'GLD', 'MP']
         
         # Create a session for connection reuse
         self.session = requests.Session()
