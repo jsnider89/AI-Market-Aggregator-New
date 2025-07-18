@@ -41,8 +41,15 @@ class RSSIngest:
         ]
         
         self.session = requests.Session()
+        # Use a more realistic browser User-Agent to avoid blocking
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (compatible; MarketAggregator/1.0)'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/rss+xml, application/xml, text/xml;q=0.9, */*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1'
         })
 
     def parse_single_feed(self, source_name: str, feed_url: str, max_articles: int = 5) -> Tuple[str, List[Dict]]:
@@ -55,8 +62,29 @@ class RSSIngest:
         try:
             logger.info(f"Fetching feed: {source_name}")
             
-            # Fetch the feed with timeout
-            response = self.session.get(feed_url, timeout=15)
+            # Add small delay for rate limiting (especially for same-domain requests)
+            import time
+            import urllib.parse
+            
+            # Extract domain for rate limiting
+            domain = urllib.parse.urlparse(feed_url).netloc
+            if 'newsmax.com' in domain:
+                # Extra delay for Newsmax since they seem to be rate limiting
+                time.sleep(2)
+                # Shorter timeout for known problematic feeds
+                timeout = 10
+            else:
+                timeout = 15
+            
+            # Fetch the feed with appropriate timeout
+            response = self.session.get(feed_url, timeout=timeout)
+            
+            # Check for rate limiting responses
+            if response.status_code == 429:
+                logger.warning(f"{source_name}: Rate limited (429), retrying after delay...")
+                time.sleep(5)
+                response = self.session.get(feed_url, timeout=timeout)
+            
             response.raise_for_status()
             
             # Parse with feedparser - handles all the XML complexity for us
@@ -110,7 +138,7 @@ class RSSIngest:
             return status, articles
             
         except requests.exceptions.Timeout:
-            error_msg = f"❌ {source_name}: Timeout after 15 seconds"
+            error_msg = f"❌ {source_name}: Timeout after {timeout} seconds"
             logger.error(error_msg)
             return error_msg, []
             
