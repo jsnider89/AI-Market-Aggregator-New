@@ -213,7 +213,7 @@ class GeminiProvider(AIProvider):
                     {
                         "parts": [
                             {
-                                "text": f"You are a professional financial market analyst. Provide comprehensive analysis with deep reasoning.\n\n{prompt}"
+                                "text": f"You are a professional financial market analyst. Provide comprehensive analysis with deep reasoning. MAke sure to take into account the current time of day for your analysis.\n\n{prompt}"
                             }
                         ]
                     }
