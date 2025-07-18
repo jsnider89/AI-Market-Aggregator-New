@@ -222,7 +222,7 @@ class GeminiProvider(AIProvider):
                     "temperature": 0.7,
                     "topK": 40,
                     "topP": 0.95,
-                    "maxOutputTokens": 4000,
+                    "maxOutputTokens": 12000,
                     "candidateCount": 1
                 },
                 "safetySettings": [
