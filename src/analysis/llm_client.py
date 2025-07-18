@@ -197,7 +197,7 @@ class GeminiProvider(AIProvider):
         })
         
         # Gemini 2.0 Flash model endpoint
-        self.model = "gemini-2.0-flash-exp"
+        self.model = "gemini-2.5-flash"
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
         
         logger.info("Gemini provider initialized")
@@ -222,7 +222,7 @@ class GeminiProvider(AIProvider):
                     "temperature": 0.7,
                     "topK": 40,
                     "topP": 0.95,
-                    "maxOutputTokens": 4000,
+                    "maxOutputTokens": 8000,
                     "candidateCount": 1
                 },
                 "safetySettings": [
