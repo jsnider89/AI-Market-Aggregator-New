@@ -145,7 +145,7 @@ def sanitize_html_content(self, text: str) -> str:
 
 **Multi-Provider Fallback System:**
 1. **Primary:** Google Gemini 2.5 Flash (fastest, cost-effective)
-2. **Secondary:** OpenAI GPT-4o Mini (reliable fallback)
+2. **Secondary:** OpenAI o4-Mini (reliable fallback)
 3. **Tertiary:** Anthropic Claude (additional redundancy)
 4. **Emergency:** Basic analysis mode (no external dependencies)
 
