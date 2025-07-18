@@ -183,6 +183,130 @@ class AnthropicProvider(AIProvider):
     def get_provider_name(self) -> str:
         return "Anthropic Claude 3.5 Haiku"
 
+class GeminiProvider(AIProvider):
+    """Google Gemini API provider implementation"""
+    
+    def __init__(self):
+        self.api_key = os.getenv('GEMINI_API_KEY')
+        if not self.api_key:
+            raise ValueError("GEMINI_API_KEY not found in environment")
+        
+        self.session = requests.Session()
+        self.session.headers.update({
+            'Content-Type': 'application/json'
+        })
+        
+        # Gemini 2.0 Flash model endpoint
+        self.model = "gemini-2.0-flash-exp"
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta"
+        
+        logger.info("Gemini provider initialized")
+
+    def generate_analysis(self, prompt: str) -> Optional[str]:
+        """Generate analysis using Google Gemini API"""
+        try:
+            logger.info("Sending request to Google Gemini...")
+            
+            # Gemini API request structure
+            data = {
+                "contents": [
+                    {
+                        "parts": [
+                            {
+                                "text": f"You are a professional financial market analyst. Provide comprehensive analysis with deep reasoning.\n\n{prompt}"
+                            }
+                        ]
+                    }
+                ],
+                "generationConfig": {
+                    "temperature": 0.7,
+                    "topK": 40,
+                    "topP": 0.95,
+                    "maxOutputTokens": 4000,
+                    "candidateCount": 1
+                },
+                "safetySettings": [
+                    {
+                        "category": "HARM_CATEGORY_HARASSMENT",
+                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                    },
+                    {
+                        "category": "HARM_CATEGORY_HATE_SPEECH", 
+                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                    },
+                    {
+                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
+                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                    },
+                    {
+                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
+                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
+                    }
+                ]
+            }
+            
+            # Make the API request
+            url = f"{self.base_url}/models/{self.model}:generateContent"
+            params = {"key": self.api_key}
+            
+            response = self.session.post(
+                url,
+                params=params,
+                json=data,
+                timeout=120
+            )
+            
+            logger.info(f"Gemini response status: {response.status_code}")
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                # Extract content from Gemini response structure
+                if 'candidates' in result and len(result['candidates']) > 0:
+                    candidate = result['candidates'][0]
+                    if 'content' in candidate and 'parts' in candidate['content']:
+                        content = candidate['content']['parts'][0].get('text', '')
+                        
+                        if not content or not content.strip():
+                            logger.warning("Received empty response from Gemini")
+                            return None
+                        
+                        # Log usage metadata if available
+                        if 'usageMetadata' in result:
+                            usage = result['usageMetadata']
+                            logger.info(f"Gemini usage - prompt: {usage.get('promptTokenCount', 0)}, "
+                                      f"response: {usage.get('candidatesTokenCount', 0)}, "
+                                      f"total: {usage.get('totalTokenCount', 0)}")
+                        
+                        return content
+                    else:
+                        logger.error("Unexpected Gemini response structure - no content found")
+                        return None
+                else:
+                    logger.error("Unexpected Gemini response structure - no candidates found")
+                    return None
+            else:
+                logger.error(f"Gemini API error: {response.status_code}")
+                try:
+                    error_details = response.json()
+                    logger.error(f"Error details: {error_details}")
+                except:
+                    logger.error(f"Raw error response: {response.text}")
+                return None
+                
+        except requests.exceptions.Timeout:
+            logger.error("Gemini API request timed out")
+            return None
+        except requests.exceptions.RequestException as e:
+            logger.error(f"Gemini API network error: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Unexpected error with Gemini API: {e}")
+            return None
+
+    def get_provider_name(self) -> str:
+        return "Google Gemini 2.0 Flash"
+
 class AIClient:
     """
     Main AI client that manages multiple providers and handles fallback
@@ -192,6 +316,14 @@ class AIClient:
         self.providers = []
         
         # Try to initialize providers based on available API keys
+        # Prioritize Gemini 2.0 Flash if available (faster and potentially cheaper)
+        if os.getenv('GEMINI_API_KEY'):
+            try:
+                self.providers.append(GeminiProvider())
+                logger.info("Gemini provider added (prioritized)")
+            except Exception as e:
+                logger.warning(f"Failed to initialize Gemini provider: {e}")
+        
         if os.getenv('OPENAI_API_KEY'):
             try:
                 self.providers.append(OpenAIProvider())
