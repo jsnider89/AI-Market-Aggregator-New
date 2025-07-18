@@ -35,10 +35,26 @@ class RSSIngest:
     def load_config(self):
         """Load RSS feeds configuration from JSON file"""
         try:
-            # Look for config file in the root directory
-            config_path = Path(self.config_file)
-            if not config_path.exists():
-                logger.warning(f"Config file {self.config_file} not found, using fallback feeds")
+            # Try multiple locations for the config file
+            possible_paths = [
+                Path(self.config_file),  # Current directory
+                Path(__file__).parent.parent.parent / self.config_file,  # Repository root from src/data_sources/
+                Path.cwd() / self.config_file,  # Current working directory
+                Path("./feeds_config.json"),  # Explicit relative path
+            ]
+            
+            config_path = None
+            for path in possible_paths:
+                logger.info(f"🔍 Checking for config at: {path.absolute()}")
+                if path.exists():
+                    config_path = path
+                    logger.info(f"✅ Found config file at: {path.absolute()}")
+                    break
+                else:
+                    logger.info(f"❌ Not found at: {path.absolute()}")
+            
+            if not config_path:
+                logger.warning(f"Config file {self.config_file} not found in any location, using fallback feeds")
                 self._use_fallback_config()
                 return
             
@@ -47,9 +63,15 @@ class RSSIngest:
             
             # Extract enabled feeds only
             self.feeds = []
+            enabled_count = 0
+            disabled_count = 0
+            
             for feed in config_data.get('rss_feeds', []):
                 if feed.get('enabled', True):  # Default to enabled if not specified
                     self.feeds.append((feed['name'], feed['url']))
+                    enabled_count += 1
+                else:
+                    disabled_count += 1
             
             # Load configuration settings
             self.config = config_data.get('config', {})
@@ -58,7 +80,13 @@ class RSSIngest:
             self.newsmax_timeout = self.config.get('newsmax_timeout', 10)
             self.rate_limit_delay = self.config.get('rate_limit_delay', 2)
             
-            logger.info(f"Loaded {len(self.feeds)} enabled feeds from {self.config_file}")
+            logger.info(f"✅ Config loaded: {enabled_count} enabled feeds, {disabled_count} disabled feeds")
+            logger.info(f"✅ Settings: {self.max_articles} articles/feed, {self.default_timeout}s timeout")
+            
+            # List all enabled feeds for debugging
+            logger.info("📝 Enabled feeds:")
+            for i, (name, url) in enumerate(self.feeds, 1):
+                logger.info(f"   {i}. {name}")
             
         except Exception as e:
             logger.error(f"Error loading config file {self.config_file}: {e}")
