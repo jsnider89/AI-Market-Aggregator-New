@@ -145,43 +145,43 @@
       "url": "https://search.cnbc.com/rs/search/combinedcms/view.xml?partnerId=wrss01&id=19854910",
       "enabled": true,
       "category": "finance"
-    }
+    },
     {
       "name": "WSJ Personal Finance",
       "url": "https://feeds.content.dowjones.io/public/rss/RSSPersonalFinance",
       "enabled": true,
       "category": "finance"
-    }
+    },
     {
       "name": "WSJ Markets",
       "url": "https://feeds.content.dowjones.io/public/rss/RSSMarketsMain",
       "enabled": true,
       "category": "finance"
-    }
+    },
     {
       "name": "WSJ US News",
       "url": "https://feeds.content.dowjones.io/public/rss/RSSUSnews",
       "enabled": true,
       "category": "us news"
-    }
+    },
     {
       "name": "WSJ Politics",
       "url": "https://feeds.content.dowjones.io/public/rss/socialpoliticsfeed",
       "enabled": true,
       "category": "politics"
-    }
+    },
     {
       "name": "WSJ Economy",
       "url": "https://feeds.content.dowjones.io/public/rss/socialeconomyfeed",
       "enabled": true,
       "category": "finance"
-    }
+    },
     {
       "name": "WSJ Technology",
       "url": "https://feeds.content.dowjones.io/public/rss/RSSWSJD",
       "enabled": true,
       "category": "technology"
-    }
+    },
   ],
   "config": {
     "max_articles_per_feed": 5,
