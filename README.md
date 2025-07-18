@@ -27,7 +27,7 @@ This system automatically aggregates market data and news from 15+ RSS feeds, an
 | Metric | Before Refactoring | After Refactoring | Improvement |
 |--------|-------------------|-------------------|-------------|
 | **Execution Time** | 2.5 minutes | 39 seconds | **74% faster** |
-| **Articles Processed** | ~25 (timeouts) | 105 articles | **320% more data** |
+| **Articles Processed** | ~100  | 105 articles | **5% more data** |
 | **Feed Success Rate** | ~65% (Newsmax timeouts) | 100% | **35% improvement** |
 | **Code Maintainability** | Monolithic (900 lines) | Modular (6 focused modules) | **Infinitely better** |
 | **Security Vulnerabilities** | Multiple critical issues | Zero known issues | **100% improvement** |
