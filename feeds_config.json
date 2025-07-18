@@ -181,7 +181,7 @@
       "url": "https://feeds.content.dowjones.io/public/rss/RSSWSJD",
       "enabled": true,
       "category": "technology"
-    },
+    }
   ],
   "config": {
     "max_articles_per_feed": 5,
