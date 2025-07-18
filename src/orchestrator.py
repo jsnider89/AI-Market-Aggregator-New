@@ -10,11 +10,11 @@ from typing import Dict, List
 import logging
 
 # Import our new modular components
-from .utils.logging_config import setup_logging, validate_environment
-from .data_sources.rss_ingest import RSSIngest
-from .data_sources.market_data import MarketDataClient
-from .analysis.llm_client import AIClient
-from .reporting.email_generator import EmailGenerator
+from src.utils.logging_config import setup_logging, validate_environment
+from src.data_sources.rss_ingest import RSSIngest
+from src.data_sources.market_data import MarketDataClient
+from src.analysis.llm_client import AIClient
+from src.reporting.email_generator import EmailGenerator
 
 class MarketIntelligenceOrchestrator:
     """
