@@ -23,13 +23,14 @@ class AIProvider(ABC):
 class OpenAIProvider(AIProvider):
     """OpenAI API provider implementation with GPT-5-mini"""
     
-    def __init__(self, model_variant="gpt-5-mini"):
+    def __init__(self, model_variant="gpt-5-mini", reasoning_effort="medium"):
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
         
         # Allow choosing between GPT-5 variants
         self.model = model_variant  # gpt-5, gpt-5-mini, gpt-5-nano
+        self.reasoning_effort = reasoning_effort  # minimal, low, medium, high
         
         self.session = requests.Session()
         self.session.headers.update({
@@ -38,7 +39,7 @@ class OpenAIProvider(AIProvider):
         })
         
         # Don't log the actual API key - just confirm it exists
-        logger.info(f"OpenAI provider initialized with {self.model}")
+        logger.info(f"OpenAI provider initialized with {self.model} (reasoning: {self.reasoning_effort})")
 
     def generate_analysis(self, prompt: str) -> Optional[str]:
         """Generate analysis using OpenAI GPT-5-mini API"""
@@ -62,7 +63,7 @@ class OpenAIProvider(AIProvider):
                 "temperature": 0.7,
                 "top_p": 0.9,
                 "verbosity": "medium",  # New GPT-5 parameter: low, medium, high
-                "reasoning_effort": "minimal"  # New GPT-5 parameter for faster responses
+                "reasoning_effort": self.reasoning_effort  # Use configured reasoning level
             }
             
             response = self.session.post(
@@ -108,7 +109,7 @@ class OpenAIProvider(AIProvider):
             return None
 
     def get_provider_name(self) -> str:
-        return f"OpenAI {self.model.upper()}"
+        return f"OpenAI {self.model.upper()} ({self.reasoning_effort} reasoning)"
 
 class AnthropicProvider(AIProvider):
     """Anthropic Claude API provider implementation"""
