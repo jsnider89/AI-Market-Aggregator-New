@@ -64,41 +64,57 @@ class EmailGenerator:
         if not text:
             return ""
 
-        # First sanitize the input
-        text = self.sanitize_html_content(text)
+        # Process markdown BEFORE HTML escaping
+        # Step 1: Temporarily replace bold markers with placeholders
+        # to protect them during HTML escaping
+        bold_pattern = r'\*\*([^*]+)\*\*'
+        bold_matches = re.findall(bold_pattern, text)
         
-        # Split into lines for processing
+        # Replace bold patterns with temporary markers
+        for i, match in enumerate(bold_matches):
+            text = text.replace(f'**{match}**', f'|||BOLD_{i}|||', 1)
+        
+        # Step 2: Process headers (before HTML escaping)
         lines = text.split('\n')
         processed_lines = []
         
-        # Process each line
         for line in lines:
-            # Check for headers first (before other processing)
             if line.strip().startswith('###'):
                 content = line.strip()[3:].strip()
-                # Process bold within headers
-                content = self._process_bold_text(content)
-                processed_lines.append(f'<h3>{content}</h3>')
+                # Escape the content but mark it as a header
+                processed_lines.append(f'|||H3|||{content}|||/H3|||')
             elif line.strip().startswith('##'):
                 content = line.strip()[2:].strip()
-                # Process bold within headers
-                content = self._process_bold_text(content)
-                processed_lines.append(f'<h2>{content}</h2>')
+                # Escape the content but mark it as a header
+                processed_lines.append(f'|||H2|||{content}|||/H2|||')
             else:
-                # Process bold text in regular lines
-                processed_lines.append(self._process_bold_text(line))
+                processed_lines.append(line)
         
-        # Join lines back together
-        result = '\n'.join(processed_lines)
+        text = '\n'.join(processed_lines)
         
-        # Convert line breaks to paragraphs
-        paragraphs = result.split('\n\n')
+        # Step 3: Now HTML escape everything
+        text = self.sanitize_html_content(text)
+        
+        # Step 4: Replace our temporary markers with proper HTML tags
+        # Replace bold markers
+        for i, match in enumerate(bold_matches):
+            escaped_match = html.escape(match)
+            text = text.replace(f'|||BOLD_{i}|||', f'<strong>{escaped_match}</strong>')
+        
+        # Replace header markers
+        text = text.replace('|||H2|||', '<h2>')
+        text = text.replace('|||/H2|||', '</h2>')
+        text = text.replace('|||H3|||', '<h3>')
+        text = text.replace('|||/H3|||', '</h3>')
+        
+        # Step 5: Convert line breaks to paragraphs
+        paragraphs = text.split('\n\n')
         html_paragraphs = []
         
         for para in paragraphs:
             para = para.strip()
             if para:
-                # Don't wrap headers or divs in paragraphs
+                # Don't wrap headers in paragraphs
                 if para.startswith('<h') or para.startswith('<div'):
                     html_paragraphs.append(para)
                 else:
@@ -107,23 +123,6 @@ class EmailGenerator:
                     html_paragraphs.append(f'<p>{para}</p>')
         
         return '\n'.join(html_paragraphs)
-
-    def _process_bold_text(self, text: str) -> str:
-        """
-        Process bold markdown (**text**) into HTML <strong> tags
-        
-        Args:
-            text: Text possibly containing ** markers
-            
-        Returns:
-            Text with bold HTML tags
-        """
-        # Use regex to find and replace **text** patterns
-        # This ensures proper pairing of opening and closing markers
-        pattern = r'\*\*([^*]+)\*\*'
-        result = re.sub(pattern, r'<strong>\1</strong>', text)
-        
-        return result
 
     def create_html_email(self, ai_analysis: str, ai_provider: str,
                          article_count: int, successful_feeds: int,
@@ -195,6 +194,7 @@ class EmailGenerator:
                     border-bottom: 2px solid #3498db;
                     padding-bottom: 10px;
                     margin-bottom: 20px;
+                    margin-top: 30px;
                     font-size: 24px;
                 }}
                 h3 {{
@@ -220,7 +220,7 @@ class EmailGenerator:
                 .status-error {{ color: #e74c3c; }}
                 strong {{ 
                     color: #2c3e50; 
-                    font-weight: 600;
+                    font-weight: 700;
                 }}
 
                 /* Mobile responsiveness */
