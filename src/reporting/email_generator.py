@@ -66,53 +66,64 @@ class EmailGenerator:
 
         # First sanitize the input
         text = self.sanitize_html_content(text)
-
-        # Now we can safely add HTML formatting since content is escaped
-        # Bold text (escaped ** will become ** in HTML, then we make it bold)
-        text = text.replace('**', '|||BOLD|||')  # Temporary marker
-
-        # Split by our marker and reconstruct with proper HTML
-        parts = text.split('|||BOLD|||')
-        result = parts[0]
-
-        for i in range(1, len(parts)):
-            if i % 2 == 1:  # Odd indices should be bold
-                result += '<strong>' + parts[i]
-            else:  # Even indices close bold and continue
-                result += '</strong>' + parts[i]
-
-        # Clean up any unclosed bold tags
-        bold_count = result.count('<strong>') - result.count('</strong>')
-        if bold_count > 0:
-            result += '</strong>' * bold_count
-
-        # Convert headers (looking for lines that start with ## or ###)
-        lines = result.split('\n')
-        for i, line in enumerate(lines):
-            line = line.strip()
-            if line.startswith('###'):
-                lines[i] = f'<h3>{line[3:].strip()}</h3>'
-            elif line.startswith('##'):
-                lines[i] = f'<h2>{line[2:].strip()}</h2>'
-
-        result = '\n'.join(lines)
-
+        
+        # Split into lines for processing
+        lines = text.split('\n')
+        processed_lines = []
+        
+        # Process each line
+        for line in lines:
+            # Check for headers first (before other processing)
+            if line.strip().startswith('###'):
+                content = line.strip()[3:].strip()
+                # Process bold within headers
+                content = self._process_bold_text(content)
+                processed_lines.append(f'<h3>{content}</h3>')
+            elif line.strip().startswith('##'):
+                content = line.strip()[2:].strip()
+                # Process bold within headers
+                content = self._process_bold_text(content)
+                processed_lines.append(f'<h2>{content}</h2>')
+            else:
+                # Process bold text in regular lines
+                processed_lines.append(self._process_bold_text(line))
+        
+        # Join lines back together
+        result = '\n'.join(processed_lines)
+        
         # Convert line breaks to paragraphs
         paragraphs = result.split('\n\n')
         html_paragraphs = []
-
+        
         for para in paragraphs:
             para = para.strip()
             if para:
-                # Don't wrap headers in paragraphs
+                # Don't wrap headers or divs in paragraphs
                 if para.startswith('<h') or para.startswith('<div'):
                     html_paragraphs.append(para)
                 else:
                     # Replace single line breaks with <br> within paragraphs
                     para = para.replace('\n', '<br>')
                     html_paragraphs.append(f'<p>{para}</p>')
-
+        
         return '\n'.join(html_paragraphs)
+
+    def _process_bold_text(self, text: str) -> str:
+        """
+        Process bold markdown (**text**) into HTML <strong> tags
+        
+        Args:
+            text: Text possibly containing ** markers
+            
+        Returns:
+            Text with bold HTML tags
+        """
+        # Use regex to find and replace **text** patterns
+        # This ensures proper pairing of opening and closing markers
+        pattern = r'\*\*([^*]+)\*\*'
+        result = re.sub(pattern, r'<strong>\1</strong>', text)
+        
+        return result
 
     def create_html_email(self, ai_analysis: str, ai_provider: str,
                          article_count: int, successful_feeds: int,
@@ -207,7 +218,10 @@ class EmailGenerator:
                 .status-good {{ color: #27ae60; }}
                 .status-warning {{ color: #f39c12; }}
                 .status-error {{ color: #e74c3c; }}
-                strong {{ color: #2c3e50; }}
+                strong {{ 
+                    color: #2c3e50; 
+                    font-weight: 600;
+                }}
 
                 /* Mobile responsiveness */
                 @media screen and (max-width: 600px) {{
