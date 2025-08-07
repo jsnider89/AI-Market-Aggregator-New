@@ -7,6 +7,46 @@ import logging
 
 logger = logging.getLogger("market_aggregator.ai")
 
+# ═══════════════════════════════════════════════════════════════
+# 🎛️  MODEL CONFIGURATION - CHANGE THIS LINE TO SWITCH MODELS
+# ═══════════════════════════════════════════════════════════════
+
+def get_ai_config():
+    """
+    Simple model configuration - just uncomment the model you want to use!
+    """
+    
+    # 🟢 ACTIVE MODEL - Change this line to switch models
+    return {
+        "provider": "openai",
+        "model": "gpt-5-mini",
+        "reasoning_effort": "medium",  # minimal, low, medium, high (OpenAI only)
+        "verbosity": "medium"          # low, medium, high (OpenAI only)
+    }
+    
+    # 📋 ALL AVAILABLE OPTIONS (uncomment one to use):
+    
+    # OpenAI GPT-5 Options:
+    # return {"provider": "openai", "model": "gpt-5", "reasoning_effort": "high", "verbosity": "medium"}
+    # return {"provider": "openai", "model": "gpt-5-mini", "reasoning_effort": "medium", "verbosity": "medium"}
+    # return {"provider": "openai", "model": "gpt-5-nano", "reasoning_effort": "low", "verbosity": "low"}
+    
+    # Anthropic Claude Options:
+    # return {"provider": "anthropic", "model": "claude-3-5-haiku-20241022"}
+    
+    # Google Gemini Options:
+    # return {"provider": "gemini", "model": "gemini-2.5-flash"}
+    
+    # For faster responses (speed priority):
+    # return {"provider": "openai", "model": "gpt-5-nano", "reasoning_effort": "minimal", "verbosity": "low"}
+    
+    # For highest quality (quality priority):
+    # return {"provider": "openai", "model": "gpt-5", "reasoning_effort": "high", "verbosity": "high"}
+
+# ═══════════════════════════════════════════════════════════════
+# 🔧 PROVIDER CLASSES (No need to change anything below this line)
+# ═══════════════════════════════════════════════════════════════
+
 class AIProvider(ABC):
     """Abstract base class for AI providers"""
     
@@ -21,16 +61,16 @@ class AIProvider(ABC):
         pass
 
 class OpenAIProvider(AIProvider):
-    """OpenAI API provider implementation with GPT-5-mini"""
+    """OpenAI API provider implementation with GPT-5 support"""
     
-    def __init__(self, model_variant="gpt-5-mini", reasoning_effort="medium"):
+    def __init__(self, model="gpt-5-mini", reasoning_effort="medium", verbosity="medium"):
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
         
-        # Allow choosing between GPT-5 variants
-        self.model = model_variant  # gpt-5, gpt-5-mini, gpt-5-nano
-        self.reasoning_effort = reasoning_effort  # minimal, low, medium, high
+        self.model = model
+        self.reasoning_effort = reasoning_effort
+        self.verbosity = verbosity
         
         self.session = requests.Session()
         self.session.headers.update({
@@ -38,16 +78,15 @@ class OpenAIProvider(AIProvider):
             'Content-Type': 'application/json'
         })
         
-        # Don't log the actual API key - just confirm it exists
-        logger.info(f"OpenAI provider initialized with {self.model} (reasoning: {self.reasoning_effort})")
+        logger.info(f"OpenAI provider initialized: {self.model} (reasoning: {self.reasoning_effort}, verbosity: {self.verbosity})")
 
     def generate_analysis(self, prompt: str) -> Optional[str]:
-        """Generate analysis using OpenAI GPT-5-mini API"""
+        """Generate analysis using OpenAI API"""
         try:
             logger.info(f"Sending request to OpenAI {self.model}...")
             
             data = {
-                "model": self.model,  # Use the configured model variant
+                "model": self.model,
                 "messages": [
                     {
                         "role": "system",
@@ -58,12 +97,11 @@ class OpenAIProvider(AIProvider):
                         "content": prompt
                     }
                 ],
-                # Updated parameters for GPT-5 features
                 "max_completion_tokens": 4000,
                 "temperature": 0.7,
                 "top_p": 0.9,
-                "verbosity": "medium",  # New GPT-5 parameter: low, medium, high
-                "reasoning_effort": self.reasoning_effort  # Use configured reasoning level
+                "verbosity": self.verbosity,
+                "reasoning_effort": self.reasoning_effort
             }
             
             response = self.session.post(
@@ -82,7 +120,6 @@ class OpenAIProvider(AIProvider):
                     logger.warning(f"Received empty response from OpenAI {self.model}")
                     return None
                 
-                # Log token usage for cost monitoring
                 usage = result.get('usage', {})
                 logger.info(f"OpenAI {self.model} usage - prompt: {usage.get('prompt_tokens', 0)}, "
                           f"completion: {usage.get('completion_tokens', 0)}, "
@@ -109,15 +146,17 @@ class OpenAIProvider(AIProvider):
             return None
 
     def get_provider_name(self) -> str:
-        return f"OpenAI {self.model.upper()} ({self.reasoning_effort} reasoning)"
+        return f"OpenAI {self.model.upper()} ({self.reasoning_effort} reasoning, {self.verbosity} verbosity)"
 
 class AnthropicProvider(AIProvider):
     """Anthropic Claude API provider implementation"""
     
-    def __init__(self):
+    def __init__(self, model="claude-3-5-haiku-20241022"):
         self.api_key = os.getenv('ANTHROPIC_API_KEY')
         if not self.api_key:
             raise ValueError("ANTHROPIC_API_KEY not found in environment")
+        
+        self.model = model
         
         self.session = requests.Session()
         self.session.headers.update({
@@ -126,15 +165,15 @@ class AnthropicProvider(AIProvider):
             'content-type': 'application/json'
         })
         
-        logger.info("Anthropic provider initialized")
+        logger.info(f"Anthropic provider initialized: {self.model}")
 
     def generate_analysis(self, prompt: str) -> Optional[str]:
         """Generate analysis using Anthropic API"""
         try:
-            logger.info("Sending request to Anthropic...")
+            logger.info(f"Sending request to Anthropic {self.model}...")
             
             data = {
-                'model': 'claude-3-5-haiku-20241022',
+                'model': self.model,
                 'messages': [
                     {
                         'role': 'user',
@@ -151,24 +190,23 @@ class AnthropicProvider(AIProvider):
                 timeout=120
             )
             
-            logger.info(f"Anthropic response status: {response.status_code}")
+            logger.info(f"Anthropic {self.model} response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 content = result['content'][0]['text']
                 
                 if not content or not content.strip():
-                    logger.warning("Received empty response from Anthropic")
+                    logger.warning(f"Received empty response from Anthropic {self.model}")
                     return None
                 
-                # Log usage for monitoring
                 usage = result.get('usage', {})
-                logger.info(f"Anthropic usage - input: {usage.get('input_tokens', 0)}, "
+                logger.info(f"Anthropic {self.model} usage - input: {usage.get('input_tokens', 0)}, "
                           f"output: {usage.get('output_tokens', 0)}")
                 
                 return content
             else:
-                logger.error(f"Anthropic API error: {response.status_code}")
+                logger.error(f"Anthropic {self.model} API error: {response.status_code}")
                 try:
                     error_details = response.json()
                     logger.error(f"Error details: {error_details}")
@@ -177,49 +215,48 @@ class AnthropicProvider(AIProvider):
                 return None
                 
         except requests.exceptions.Timeout:
-            logger.error("Anthropic API request timed out")
+            logger.error(f"Anthropic {self.model} API request timed out")
             return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"Anthropic API network error: {e}")
+            logger.error(f"Anthropic {self.model} API network error: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error with Anthropic API: {e}")
+            logger.error(f"Unexpected error with Anthropic {self.model} API: {e}")
             return None
 
     def get_provider_name(self) -> str:
-        return "Anthropic Claude 3.5 Haiku"
+        return f"Anthropic {self.model}"
 
 class GeminiProvider(AIProvider):
     """Google Gemini API provider implementation"""
     
-    def __init__(self):
+    def __init__(self, model="gemini-2.5-flash"):
         self.api_key = os.getenv('GEMINI_API_KEY')
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not found in environment")
+        
+        self.model = model
         
         self.session = requests.Session()
         self.session.headers.update({
             'Content-Type': 'application/json'
         })
         
-        # Gemini 2.5 Flash model endpoint
-        self.model = "gemini-2.5-flash"
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
         
-        logger.info("Gemini provider initialized")
+        logger.info(f"Gemini provider initialized: {self.model}")
 
     def generate_analysis(self, prompt: str) -> Optional[str]:
         """Generate analysis using Google Gemini API"""
         try:
-            logger.info("Sending request to Google Gemini...")
+            logger.info(f"Sending request to Google {self.model}...")
             
-            # Gemini API request structure
             data = {
                 "contents": [
                     {
                         "parts": [
                             {
-                                "text": f"You are a professional financial market analyst. Provide comprehensive analysis with deep reasoning. MAke sure to take into account the current time of day for your analysis.\n\n{prompt}"
+                                "text": f"You are a professional financial market analyst. Provide comprehensive analysis with deep reasoning. Make sure to take into account the current time of day for your analysis.\n\n{prompt}"
                             }
                         ]
                     }
@@ -251,7 +288,6 @@ class GeminiProvider(AIProvider):
                 ]
             }
             
-            # Make the API request
             url = f"{self.base_url}/models/{self.model}:generateContent"
             params = {"key": self.api_key}
             
@@ -262,37 +298,35 @@ class GeminiProvider(AIProvider):
                 timeout=120
             )
             
-            logger.info(f"Gemini response status: {response.status_code}")
+            logger.info(f"Gemini {self.model} response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 
-                # Extract content from Gemini response structure
                 if 'candidates' in result and len(result['candidates']) > 0:
                     candidate = result['candidates'][0]
                     if 'content' in candidate and 'parts' in candidate['content']:
                         content = candidate['content']['parts'][0].get('text', '')
                         
                         if not content or not content.strip():
-                            logger.warning("Received empty response from Gemini")
+                            logger.warning(f"Received empty response from Gemini {self.model}")
                             return None
                         
-                        # Log usage metadata if available
                         if 'usageMetadata' in result:
                             usage = result['usageMetadata']
-                            logger.info(f"Gemini usage - prompt: {usage.get('promptTokenCount', 0)}, "
+                            logger.info(f"Gemini {self.model} usage - prompt: {usage.get('promptTokenCount', 0)}, "
                                       f"response: {usage.get('candidatesTokenCount', 0)}, "
                                       f"total: {usage.get('totalTokenCount', 0)}")
                         
                         return content
                     else:
-                        logger.error("Unexpected Gemini response structure - no content found")
+                        logger.error(f"Unexpected Gemini {self.model} response structure - no content found")
                         return None
                 else:
-                    logger.error("Unexpected Gemini response structure - no candidates found")
+                    logger.error(f"Unexpected Gemini {self.model} response structure - no candidates found")
                     return None
             else:
-                logger.error(f"Gemini API error: {response.status_code}")
+                logger.error(f"Gemini {self.model} API error: {response.status_code}")
                 try:
                     error_details = response.json()
                     logger.error(f"Error details: {error_details}")
@@ -301,76 +335,79 @@ class GeminiProvider(AIProvider):
                 return None
                 
         except requests.exceptions.Timeout:
-            logger.error("Gemini API request timed out")
+            logger.error(f"Gemini {self.model} API request timed out")
             return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"Gemini API network error: {e}")
+            logger.error(f"Gemini {self.model} API network error: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error with Gemini API: {e}")
+            logger.error(f"Unexpected error with Gemini {self.model} API: {e}")
             return None
 
     def get_provider_name(self) -> str:
-        return "Google Gemini 2.5 Flash"
+        return f"Google {self.model}"
 
 class AIClient:
     """
-    Main AI client that manages multiple providers and handles fallback
+    Main AI client that uses the configured provider
     """
     
     def __init__(self):
-        self.providers = []
+        self.provider = None
+        config = get_ai_config()
         
-        # Try to initialize providers based on available API keys
-        # Prioritize Gemini 2.5 Flash if available (faster and potentially cheaper)
-        if os.getenv('GEMINI_API_KEY'):
-            try:
-                self.providers.append(GeminiProvider())
-                logger.info("Gemini 2.5 Flash provider added (prioritized)")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Gemini provider: {e}")
-        
-        if os.getenv('OPENAI_API_KEY'):
-            try:
-                self.providers.append(OpenAIProvider())
-                logger.info("OpenAI provider added")
-            except Exception as e:
-                logger.warning(f"Failed to initialize OpenAI provider: {e}")
-        
-        if os.getenv('ANTHROPIC_API_KEY'):
-            try:
-                self.providers.append(AnthropicProvider())
-                logger.info("Anthropic provider added")
-            except Exception as e:
-                logger.warning(f"Failed to initialize Anthropic provider: {e}")
-        
-        if not self.providers:
-            logger.warning("No AI providers available - analysis will be basic")
+        try:
+            if config["provider"] == "openai":
+                if not os.getenv('OPENAI_API_KEY'):
+                    raise ValueError("OPENAI_API_KEY not found in environment")
+                
+                self.provider = OpenAIProvider(
+                    model=config["model"],
+                    reasoning_effort=config.get("reasoning_effort", "medium"),
+                    verbosity=config.get("verbosity", "medium")
+                )
+                
+            elif config["provider"] == "anthropic":
+                if not os.getenv('ANTHROPIC_API_KEY'):
+                    raise ValueError("ANTHROPIC_API_KEY not found in environment")
+                    
+                self.provider = AnthropicProvider(model=config["model"])
+                
+            elif config["provider"] == "gemini":
+                if not os.getenv('GEMINI_API_KEY'):
+                    raise ValueError("GEMINI_API_KEY not found in environment")
+                    
+                self.provider = GeminiProvider(model=config["model"])
+                
+            else:
+                raise ValueError(f"Unknown provider: {config['provider']}")
+                
+            logger.info(f"AI Client initialized with: {self.provider.get_provider_name()}")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize configured AI provider: {e}")
+            logger.warning("No AI provider available - analysis will be basic")
+            self.provider = None
 
     def generate_analysis(self, prompt: str) -> tuple[str, str]:
         """
-        Generate analysis using available AI providers with fallback
+        Generate analysis using the configured AI provider
         
         Returns:
             Tuple of (analysis_text, provider_name)
         """
-        for provider in self.providers:
+        if self.provider:
             try:
-                logger.info(f"Attempting analysis with {provider.get_provider_name()}")
-                analysis = provider.generate_analysis(prompt)
-                
+                analysis = self.provider.generate_analysis(prompt)
                 if analysis:
-                    logger.info(f"Successfully generated analysis using {provider.get_provider_name()}")
-                    return analysis, provider.get_provider_name()
+                    return analysis, self.provider.get_provider_name()
                 else:
-                    logger.warning(f"{provider.get_provider_name()} returned empty analysis")
-                    
+                    logger.warning(f"{self.provider.get_provider_name()} returned empty analysis")
             except Exception as e:
-                logger.error(f"Error with {provider.get_provider_name()}: {e}")
-                continue
+                logger.error(f"Error with {self.provider.get_provider_name()}: {e}")
         
-        # Fallback to basic analysis if all AI providers fail
-        logger.warning("All AI providers failed - generating basic analysis")
+        # Fallback to basic analysis if AI provider fails
+        logger.warning("AI provider failed - generating basic analysis")
         return self._create_basic_analysis(), "Basic Analysis (No AI)"
 
     def _create_basic_analysis(self) -> str:
@@ -394,6 +431,5 @@ Monitor for economic data releases and corporate earnings reports."""
 
     def __del__(self):
         """Clean up sessions when object is destroyed"""
-        for provider in self.providers:
-            if hasattr(provider, 'session'):
-                provider.session.close()
+        if self.provider and hasattr(self.provider, 'session'):
+            self.provider.session.close()
