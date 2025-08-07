@@ -100,7 +100,7 @@ class OpenAIProvider(AIProvider):
                         "content": prompt
                     }
                 ],
-                "max_completion_tokens": 4000
+                "max_completion_tokens": 8000  # Increased to allow for reasoning + visible output
             }
             
             # GPT-5 models have fixed parameters - only add custom parameters for older models
@@ -127,57 +127,32 @@ class OpenAIProvider(AIProvider):
             if response.status_code == 200:
                 result = response.json()
                 
-                # Debug: Log the actual response structure to understand GPT-5 format
-                logger.info(f"GPT-5 response structure keys: {list(result.keys())}")
-                
-                # Try to extract content - GPT-5 might use different response structure
-                content = None
-                
-                # Standard chat completions format
+                # Extract content from standard GPT response format
                 if 'choices' in result and len(result['choices']) > 0:
                     choice = result['choices'][0]
-                    if 'message' in choice and 'content' in choice['message']:
-                        content = choice['message']['content']
-                        logger.info("Found content in standard choices[0].message.content format")
-                    else:
-                        logger.info(f"Choice structure: {list(choice.keys())}")
-                
-                # Alternative GPT-5 format (if different)
-                elif 'output' in result:
-                    if isinstance(result['output'], list) and len(result['output']) > 0:
-                        output_item = result['output'][0]
-                        if 'content' in output_item:
-                            if isinstance(output_item['content'], list) and len(output_item['content']) > 0:
-                                content = output_item['content'][0].get('text', '')
-                                logger.info("Found content in output[0].content[0].text format")
-                            elif isinstance(output_item['content'], str):
-                                content = output_item['content']
-                                logger.info("Found content in output[0].content format")
-                        elif 'text' in output_item:
-                            content = output_item['text']
-                            logger.info("Found content in output[0].text format")
-                
-                # Direct content field
-                elif 'content' in result:
-                    content = result['content']
-                    logger.info("Found content in root content field")
-                
-                # If still no content, log the full structure for debugging
-                if not content:
-                    logger.warning("Could not find content in response. Full structure:")
-                    logger.warning(f"Response: {result}")
+                    content = choice['message']['content']
+                    finish_reason = choice.get('finish_reason', 'unknown')
+                    
+                    if not content or not content.strip():
+                        if finish_reason == 'length':
+                            logger.warning(f"OpenAI {self.model} hit token limit. Consider increasing max_completion_tokens or reducing reasoning_effort.")
+                        else:
+                            logger.warning(f"Received empty response from OpenAI {self.model}. Finish reason: {finish_reason}")
+                        return None
+                    
+                    # Log token usage (including reasoning tokens for GPT-5)
+                    usage = result.get('usage', {})
+                    reasoning_tokens = usage.get('completion_tokens_details', {}).get('reasoning_tokens', 0)
+                    visible_tokens = usage.get('completion_tokens', 0) - reasoning_tokens
+                    
+                    logger.info(f"OpenAI {self.model} usage - prompt: {usage.get('prompt_tokens', 0)}, "
+                              f"visible: {visible_tokens}, reasoning: {reasoning_tokens}, "
+                              f"total: {usage.get('total_tokens', 0)}")
+                    
+                    return content
+                else:
+                    logger.error(f"Unexpected response structure from OpenAI {self.model}")
                     return None
-                
-                if not content.strip():
-                    logger.warning(f"Received empty content from OpenAI {self.model}")
-                    return None
-                
-                usage = result.get('usage', {})
-                logger.info(f"OpenAI {self.model} usage - prompt: {usage.get('prompt_tokens', 0)}, "
-                          f"completion: {usage.get('completion_tokens', 0)}, "
-                          f"total: {usage.get('total_tokens', 0)}")
-                
-                return content
             else:
                 logger.error(f"OpenAI {self.model} API error: {response.status_code}")
                 try:
