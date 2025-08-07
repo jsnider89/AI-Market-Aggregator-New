@@ -14,6 +14,9 @@ logger = logging.getLogger("market_aggregator.ai")
 def get_ai_config():
     """
     Simple model configuration - just uncomment the model you want to use!
+    
+    Note: GPT-5 models have fixed temperature=1.0 and top_p=1.0 (cannot be changed).
+    Only verbosity and reasoning_effort can be customized for GPT-5 models.
     """
     
     # 🟢 ACTIVE MODEL - Change this line to switch models
@@ -97,12 +100,21 @@ class OpenAIProvider(AIProvider):
                         "content": prompt
                     }
                 ],
-                "max_completion_tokens": 4000,
-                "temperature": 0.7,
-                "top_p": 0.9,
-                "verbosity": self.verbosity,
-                "reasoning_effort": self.reasoning_effort
+                "max_completion_tokens": 4000
             }
+            
+            # GPT-5 models have fixed parameters - only add custom parameters for older models
+            if self.model.startswith('gpt-5'):
+                # GPT-5 specific parameters
+                data["verbosity"] = self.verbosity
+                data["reasoning_effort"] = self.reasoning_effort
+                # Note: temperature and top_p are fixed at default values (1.0) for GPT-5
+                logger.info(f"Using GPT-5 parameters: verbosity={self.verbosity}, reasoning_effort={self.reasoning_effort}")
+            else:
+                # Legacy models (GPT-4, GPT-3.5) support custom temperature/top_p
+                data["temperature"] = 0.7
+                data["top_p"] = 0.9
+                logger.info("Using legacy model parameters: temperature=0.7, top_p=0.9")
             
             response = self.session.post(
                 'https://api.openai.com/v1/chat/completions',
