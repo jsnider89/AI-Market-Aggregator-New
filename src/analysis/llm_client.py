@@ -126,10 +126,50 @@ class OpenAIProvider(AIProvider):
             
             if response.status_code == 200:
                 result = response.json()
-                content = result['choices'][0]['message']['content']
                 
-                if not content or not content.strip():
-                    logger.warning(f"Received empty response from OpenAI {self.model}")
+                # Debug: Log the actual response structure to understand GPT-5 format
+                logger.info(f"GPT-5 response structure keys: {list(result.keys())}")
+                
+                # Try to extract content - GPT-5 might use different response structure
+                content = None
+                
+                # Standard chat completions format
+                if 'choices' in result and len(result['choices']) > 0:
+                    choice = result['choices'][0]
+                    if 'message' in choice and 'content' in choice['message']:
+                        content = choice['message']['content']
+                        logger.info("Found content in standard choices[0].message.content format")
+                    else:
+                        logger.info(f"Choice structure: {list(choice.keys())}")
+                
+                # Alternative GPT-5 format (if different)
+                elif 'output' in result:
+                    if isinstance(result['output'], list) and len(result['output']) > 0:
+                        output_item = result['output'][0]
+                        if 'content' in output_item:
+                            if isinstance(output_item['content'], list) and len(output_item['content']) > 0:
+                                content = output_item['content'][0].get('text', '')
+                                logger.info("Found content in output[0].content[0].text format")
+                            elif isinstance(output_item['content'], str):
+                                content = output_item['content']
+                                logger.info("Found content in output[0].content format")
+                        elif 'text' in output_item:
+                            content = output_item['text']
+                            logger.info("Found content in output[0].text format")
+                
+                # Direct content field
+                elif 'content' in result:
+                    content = result['content']
+                    logger.info("Found content in root content field")
+                
+                # If still no content, log the full structure for debugging
+                if not content:
+                    logger.warning("Could not find content in response. Full structure:")
+                    logger.warning(f"Response: {result}")
+                    return None
+                
+                if not content.strip():
+                    logger.warning(f"Received empty content from OpenAI {self.model}")
                     return None
                 
                 usage = result.get('usage', {})
