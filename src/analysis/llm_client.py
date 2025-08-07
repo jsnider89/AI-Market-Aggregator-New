@@ -21,12 +21,15 @@ class AIProvider(ABC):
         pass
 
 class OpenAIProvider(AIProvider):
-    """OpenAI API provider implementation"""
+    """OpenAI API provider implementation with GPT-5-mini"""
     
-    def __init__(self):
+    def __init__(self, model_variant="gpt-5-mini"):
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
+        
+        # Allow choosing between GPT-5 variants
+        self.model = model_variant  # gpt-5, gpt-5-mini, gpt-5-nano
         
         self.session = requests.Session()
         self.session.headers.update({
@@ -35,15 +38,15 @@ class OpenAIProvider(AIProvider):
         })
         
         # Don't log the actual API key - just confirm it exists
-        logger.info("OpenAI provider initialized")
+        logger.info(f"OpenAI provider initialized with {self.model}")
 
     def generate_analysis(self, prompt: str) -> Optional[str]:
-        """Generate analysis using OpenAI API"""
+        """Generate analysis using OpenAI GPT-5-mini API"""
         try:
-            logger.info("Sending request to OpenAI...")
+            logger.info(f"Sending request to OpenAI {self.model}...")
             
             data = {
-                "model": "gpt-4o-mini",
+                "model": self.model,  # Use the configured model variant
                 "messages": [
                     {
                         "role": "system",
@@ -54,37 +57,39 @@ class OpenAIProvider(AIProvider):
                         "content": prompt
                     }
                 ],
-                # Updated parameters for better cost control and reliability
-                "max_completion_tokens": 4000,  # More explicit than max_tokens
-                "temperature": 0.7,  # Slight randomness for more natural output
-                "top_p": 0.9  # Focus on most likely tokens
+                # Updated parameters for GPT-5 features
+                "max_completion_tokens": 4000,
+                "temperature": 0.7,
+                "top_p": 0.9,
+                "verbosity": "medium",  # New GPT-5 parameter: low, medium, high
+                "reasoning_effort": "minimal"  # New GPT-5 parameter for faster responses
             }
             
             response = self.session.post(
                 'https://api.openai.com/v1/chat/completions',
                 json=data,
-                timeout=120  # Longer timeout for complex analysis
+                timeout=120
             )
             
-            logger.info(f"OpenAI response status: {response.status_code}")
+            logger.info(f"OpenAI {self.model} response status: {response.status_code}")
             
             if response.status_code == 200:
                 result = response.json()
                 content = result['choices'][0]['message']['content']
                 
                 if not content or not content.strip():
-                    logger.warning("Received empty response from OpenAI")
+                    logger.warning(f"Received empty response from OpenAI {self.model}")
                     return None
                 
-                # Log token usage for cost monitoring (but don't log content)
+                # Log token usage for cost monitoring
                 usage = result.get('usage', {})
-                logger.info(f"OpenAI usage - prompt: {usage.get('prompt_tokens', 0)}, "
+                logger.info(f"OpenAI {self.model} usage - prompt: {usage.get('prompt_tokens', 0)}, "
                           f"completion: {usage.get('completion_tokens', 0)}, "
                           f"total: {usage.get('total_tokens', 0)}")
                 
                 return content
             else:
-                logger.error(f"OpenAI API error: {response.status_code}")
+                logger.error(f"OpenAI {self.model} API error: {response.status_code}")
                 try:
                     error_details = response.json()
                     logger.error(f"Error details: {error_details}")
@@ -93,17 +98,17 @@ class OpenAIProvider(AIProvider):
                 return None
                 
         except requests.exceptions.Timeout:
-            logger.error("OpenAI API request timed out")
+            logger.error(f"OpenAI {self.model} API request timed out")
             return None
         except requests.exceptions.RequestException as e:
-            logger.error(f"OpenAI API network error: {e}")
+            logger.error(f"OpenAI {self.model} API network error: {e}")
             return None
         except Exception as e:
-            logger.error(f"Unexpected error with OpenAI API: {e}")
+            logger.error(f"Unexpected error with OpenAI {self.model} API: {e}")
             return None
 
     def get_provider_name(self) -> str:
-        return "OpenAI GPT-4o Mini"
+        return f"OpenAI {self.model.upper()}"
 
 class AnthropicProvider(AIProvider):
     """Anthropic Claude API provider implementation"""
