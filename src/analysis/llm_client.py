@@ -93,7 +93,30 @@ class OpenAIProvider(AIProvider):
                 "messages": [
                     {
                         "role": "system",
-                        "content": "You are a professional financial market analyst. Provide comprehensive analysis with deep reasoning."
+                        "content": """You are a professional financial market analyst. Provide comprehensive analysis using STRICT MARKDOWN formatting:
+
+FORMATTING REQUIREMENTS:
+- Use ## for main sections (e.g., ## SECTION 1 - MARKET PERFORMANCE)
+- Use ### for subsections (e.g., ### Looking Ahead)
+- Use **bold** for emphasis and important terms
+- Use - for bullet points with proper spacing
+- Use numbered lists (1., 2., 3.) for structured content
+- Always include blank lines between sections
+- Use | for tables when showing market data
+
+EXAMPLE OUTPUT STRUCTURE:
+## SECTION 1 - MARKET PERFORMANCE
+- **QQQ** | $569.24 | 🟢 +1.92 (+0.34%)
+- **SPY** | $632.25 | 🔴 -0.53 (-0.08%)
+
+## SECTION 2 - TOP MARKET & ECONOMY STORIES
+
+### 1) Story Headline
+**What happened:** [explanation]
+**Why it matters:** [analysis]
+**Sources:** [attribution]
+
+Provide professional, comprehensive analysis with deep reasoning while maintaining this exact formatting structure."""
                     },
                     {
                         "role": "user", 
