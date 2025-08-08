@@ -3,6 +3,7 @@
 # Core dependencies (required)
 requests>=2.31.0        # HTTP client with security fixes
 feedparser>=6.0.10      # Robust RSS/Atom parsing (replaces vulnerable regex)
+markdown>=3.4.0         # Professional markdown-to-HTML conversion for email reports
 
 # Future enhancements (commented out until needed)
 # aiohttp>=3.9.0        # For async HTTP requests (Phase 2 performance)
