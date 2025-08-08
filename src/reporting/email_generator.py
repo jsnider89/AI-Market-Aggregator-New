@@ -1,4 +1,8 @@
 # src/reporting/email_generator.py
+# Complete email generator with markdown library support
+# Requirements: pip install markdown
+
+import markdown
 import smtplib
 import html
 import re
@@ -13,7 +17,7 @@ logger = logging.getLogger("market_aggregator.email")
 
 class EmailGenerator:
     """
-    Secure email generator with HTML templating and XSS protection
+    Secure email generator with professional markdown-to-HTML conversion
     """
 
     def __init__(self):
@@ -33,117 +37,97 @@ class EmailGenerator:
             logger.error(error_msg)
             raise ValueError(error_msg)
 
-        logger.info("Email generator initialized successfully")
+        # Initialize markdown processor with extensions
+        self.md = markdown.Markdown(extensions=[
+            'extra',        # Tables, code blocks, definition lists
+            'nl2br',        # Convert single newlines to <br>
+            'toc',          # Table of contents support
+            'abbr',         # Abbreviation support
+            'tables'        # Enhanced table support
+        ])
+
+        logger.info("Email generator initialized with markdown support")
 
     def sanitize_html_content(self, text: str) -> str:
         """
         Sanitize text content to prevent XSS vulnerabilities
-
+        
         Args:
             text: Raw text that might contain HTML
-
+            
         Returns:
             HTML-escaped safe text
         """
         if not text:
             return ""
-
+        
         # Escape HTML characters to prevent XSS
         return html.escape(text)
 
     def convert_markdown_to_html(self, text: str) -> str:
         """
-        Convert markdown-style formatting to safe HTML
-
+        Convert markdown to HTML using professional markdown library
+        
         Args:
             text: Text with markdown formatting
-
+            
         Returns:
-            HTML-formatted text with XSS protection
+            Clean, safe HTML
         """
         if not text:
             return ""
 
-        # Process markdown BEFORE HTML escaping
-        # Step 1: Temporarily replace bold markers with placeholders
-        # to protect them during HTML escaping
-        bold_pattern = r'\*\*([^*]+)\*\*'
-        bold_matches = re.findall(bold_pattern, text)
+        try:
+            # Reset the markdown processor for clean conversion
+            self.md.reset()
+            
+            # Convert markdown to HTML
+            html_content = self.md.convert(text)
+            
+            # Add custom styling for market data (pipe-separated values)
+            html_content = self._enhance_market_data_formatting(html_content)
+            
+            return html_content
+            
+        except Exception as e:
+            logger.error(f"Markdown conversion error: {e}")
+            # Fallback to basic HTML escaping
+            return f"<pre>{html.escape(text)}</pre>"
+
+    def _enhance_market_data_formatting(self, html_content: str) -> str:
+        """
+        Add custom styling to market data lines (contains $ and emoji indicators)
+        """
+        # Find lines that look like market data: contain $, 🟢, or 🔴
+        market_pattern = r'<p>([^<]*(?:\$[0-9.,]+|🟢|🔴)[^<]*)</p>'
         
-        # Replace bold patterns with temporary markers
-        for i, match in enumerate(bold_matches):
-            text = text.replace(f'**{match}**', f'|||BOLD_{i}|||', 1)
+        def format_market_line(match):
+            content = match.group(1)
+            # Style as a formatted market data row
+            return f'<div class="market-data">{content}</div>'
         
-        # Step 2: Process headers (before HTML escaping)
-        lines = text.split('\n')
-        processed_lines = []
-        
-        for line in lines:
-            if line.strip().startswith('###'):
-                content = line.strip()[3:].strip()
-                # Escape the content but mark it as a header
-                processed_lines.append(f'|||H3|||{content}|||/H3|||')
-            elif line.strip().startswith('##'):
-                content = line.strip()[2:].strip()
-                # Escape the content but mark it as a header
-                processed_lines.append(f'|||H2|||{content}|||/H2|||')
-            else:
-                processed_lines.append(line)
-        
-        text = '\n'.join(processed_lines)
-        
-        # Step 3: Now HTML escape everything
-        text = self.sanitize_html_content(text)
-        
-        # Step 4: Replace our temporary markers with proper HTML tags
-        # Replace bold markers
-        for i, match in enumerate(bold_matches):
-            escaped_match = html.escape(match)
-            text = text.replace(f'|||BOLD_{i}|||', f'<strong>{escaped_match}</strong>')
-        
-        # Replace header markers
-        text = text.replace('|||H2|||', '<h2>')
-        text = text.replace('|||/H2|||', '</h2>')
-        text = text.replace('|||H3|||', '<h3>')
-        text = text.replace('|||/H3|||', '</h3>')
-        
-        # Step 5: Convert line breaks to paragraphs
-        paragraphs = text.split('\n\n')
-        html_paragraphs = []
-        
-        for para in paragraphs:
-            para = para.strip()
-            if para:
-                # Don't wrap headers in paragraphs
-                if para.startswith('<h') or para.startswith('<div'):
-                    html_paragraphs.append(para)
-                else:
-                    # Replace single line breaks with <br> within paragraphs
-                    para = para.replace('\n', '<br>')
-                    html_paragraphs.append(f'<p>{para}</p>')
-        
-        return '\n'.join(html_paragraphs)
+        return re.sub(market_pattern, format_market_line, html_content)
 
     def create_html_email(self, ai_analysis: str, ai_provider: str,
                          article_count: int, successful_feeds: int,
                          total_feeds: int) -> str:
         """
         Create a professional, mobile-responsive HTML email with the analysis
-
+        
         Args:
             ai_analysis: The AI-generated analysis text
             ai_provider: Name of AI provider used
             article_count: Number of articles processed
             successful_feeds: Number of feeds that loaded successfully
             total_feeds: Total number of feeds attempted
-
+            
         Returns:
             Complete HTML email content
         """
-        # Convert the analysis to safe HTML
+        # Convert the analysis to HTML using markdown library
         analysis_html = self.convert_markdown_to_html(ai_analysis)
 
-        # Create the HTML template with mobile-responsive improvements
+        # Enhanced HTML template with better CSS
         html_template = f"""
         <!DOCTYPE html>
         <html>
@@ -159,7 +143,7 @@ class EmailGenerator:
                     margin: 0;
                     padding: 0;
                     background-color: #f5f5f5;
-                    -webkit-text-size-adjust: 100%; /* Prevent font scaling in landscape */
+                    -webkit-text-size-adjust: 100%;
                 }}
                 .container {{
                     background-color: white;
@@ -189,24 +173,91 @@ class EmailGenerator:
                     padding: 10px;
                     border-radius: 5px;
                 }}
-                h2 {{
+                
+                /* Markdown-generated content styling */
+                .content h1 {{
+                    color: #2c3e50;
+                    border-bottom: 3px solid #3498db;
+                    padding-bottom: 15px;
+                    margin-top: 40px;
+                    margin-bottom: 25px;
+                    font-size: 26px;
+                }}
+                .content h2 {{
                     color: #2c3e50;
                     border-bottom: 2px solid #3498db;
                     padding-bottom: 10px;
+                    padding-top: 20px;
                     margin-bottom: 20px;
                     margin-top: 30px;
-                    font-size: 24px;
+                    font-size: 22px;
                 }}
-                h3 {{
+                .content h3 {{
                     color: #2c3e50;
                     font-size: 18px;
-                    margin-bottom: 10px;
+                    margin-bottom: 15px;
                     margin-top: 25px;
+                    padding-left: 10px;
+                    border-left: 4px solid #3498db;
                 }}
-                p {{
+                .content p {{
                     color: #444;
-                    margin: 10px 0;
+                    margin: 12px 0;
+                    line-height: 1.7;
                 }}
+                .content ul, .content ol {{
+                    margin: 15px 0;
+                    padding-left: 30px;
+                }}
+                .content li {{
+                    margin: 8px 0;
+                    line-height: 1.6;
+                }}
+                .content strong {{
+                    color: #2c3e50;
+                    font-weight: 700;
+                }}
+                .content table {{
+                    border-collapse: collapse;
+                    width: 100%;
+                    margin: 20px 0;
+                }}
+                .content th, .content td {{
+                    border: 1px solid #ddd;
+                    padding: 12px;
+                    text-align: left;
+                }}
+                .content th {{
+                    background-color: #f8f9fa;
+                    font-weight: 600;
+                }}
+                .content code {{
+                    background-color: #f8f9fa;
+                    padding: 2px 6px;
+                    border-radius: 4px;
+                    font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+                    font-size: 0.9em;
+                }}
+                .content pre {{
+                    background-color: #f8f9fa;
+                    padding: 15px;
+                    border-radius: 6px;
+                    overflow-x: auto;
+                    border-left: 4px solid #3498db;
+                }}
+                
+                /* Custom market data styling */
+                .market-data {{
+                    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+                    border-radius: 6px;
+                    padding: 10px 15px;
+                    margin: 8px 0;
+                    font-family: 'SF Mono', Monaco, monospace;
+                    font-size: 14px;
+                    border-left: 4px solid #3498db;
+                    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+                }}
+                
                 .footer {{
                     margin-top: 40px;
                     padding-top: 20px;
@@ -218,10 +269,6 @@ class EmailGenerator:
                 .status-good {{ color: #27ae60; }}
                 .status-warning {{ color: #f39c12; }}
                 .status-error {{ color: #e74c3c; }}
-                strong {{ 
-                    color: #2c3e50; 
-                    font-weight: 700;
-                }}
 
                 /* Mobile responsiveness */
                 @media screen and (max-width: 600px) {{
@@ -235,14 +282,14 @@ class EmailGenerator:
                     .header h1 {{
                         font-size: 22px;
                     }}
-                    h2 {{
-                        font-size: 20px;
+                    .content h1 {{ font-size: 22px; }}
+                    .content h2 {{ font-size: 20px; }}
+                    .content h3 {{ font-size: 18px; }}
+                    .content ul, .content ol {{
+                        padding-left: 20px;
                     }}
-                    h3 {{
-                        font-size: 17px;
-                    }}
-                    body {{
-                        padding: 0 !important;
+                    .content table {{
+                        font-size: 12px;
                     }}
                 }}
             </style>
@@ -291,14 +338,14 @@ class EmailGenerator:
                    total_feeds: int) -> bool:
         """
         Send the analysis report via email
-
+        
         Args:
             ai_analysis: The AI-generated analysis
             ai_provider: Name of AI provider used
             article_count: Number of articles processed
             successful_feeds: Number of successful feed fetches
             total_feeds: Total feeds attempted
-
+            
         Returns:
             True if email sent successfully, False otherwise
         """
