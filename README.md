@@ -27,7 +27,7 @@ This system automatically aggregates market data and news from 15+ RSS feeds, an
 
 | Metric | Before Refactoring | After Refactoring | Improvement |
 |--------|-------------------|-------------------|-------------|
-| **Execution Time** | 2.5 minutes | 39 seconds | **74% faster** |
+| **Execution Time** | 2.5 minutes | 39 seconds(with Gemini 2.5 Flash, gpt-5-mini is 1 min 50 seconds) | **74% faster** |
 | **Articles Processed** | ~100  | 105 articles | **5% more data** |
 | **Feed Success Rate** | ~65% (Newsmax timeouts) | 100% | **35% improvement** |
 | **AI Reliability** | Single point of failure | 99.9% uptime via fallbacks | **Near perfect** |
