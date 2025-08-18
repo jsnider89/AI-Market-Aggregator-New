@@ -113,7 +113,6 @@ EXAMPLE OUTPUT STRUCTURE:
 
 ### 1) Story Headline
 **What happened:** [explanation]
-**Why it matters:** [analysis]
 **Sources:** [attribution]
 
 Provide professional, comprehensive analysis with deep reasoning while maintaining this exact formatting structure."""
