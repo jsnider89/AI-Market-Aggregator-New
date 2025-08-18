@@ -2,78 +2,91 @@
 import os
 import requests
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 import logging
+from dataclasses import dataclass
 
 logger = logging.getLogger("market_aggregator.ai")
 
 # ═══════════════════════════════════════════════════════════════
-# 🎛️  MODEL CONFIGURATION - CHANGE THIS LINE TO SWITCH MODELS
+# 🎛️  MODEL CONFIGURATION - CHANGE THIS SECTION TO SWITCH MODELS
 # ═══════════════════════════════════════════════════════════════
 
-def get_ai_config():
+@dataclass
+class ProviderConfig:
+    """Configuration for an AI provider"""
+    provider: str
+    model: str
+    reasoning_effort: str = "medium"  # OpenAI only
+    verbosity: str = "medium"         # OpenAI only
+
+def get_ai_config() -> Dict[str, ProviderConfig]:
     """
-    Simple model configuration - just uncomment the model you want to use!
+    Model configuration with primary and fallback providers.
     
-    Note: GPT-5 models have fixed temperature=1.0 and top_p=1.0 (cannot be changed).
-    Only verbosity and reasoning_effort can be customized for GPT-5 models.
+    Returns a dict with 'primary' and 'fallback' keys.
+    Set fallback to None if no fallback is desired.
     """
     
-    # 🟢 ACTIVE MODEL - Change this line to switch models
+    # 🟢 PRIMARY PROVIDER (always tried first)
+    primary = ProviderConfig(
+        provider="openai",
+        model="gpt-5-mini",
+        reasoning_effort="medium",
+        verbosity="medium"
+    )
+    
+    # 🟡 FALLBACK PROVIDER (used if primary fails)
+    fallback = ProviderConfig(
+        provider="gemini",
+        model="gemini-2.5-flash"
+    )
+    
     return {
-        "provider": "openai",
-        "model": "gpt-5-mini",
-        "reasoning_effort": "medium",  # minimal, low, medium, high (OpenAI only)
-        "verbosity": "medium"          # low, medium, high (OpenAI only)
+        "primary": primary,
+        "fallback": fallback  # Set to None to disable fallback
     }
-    
-    # 📋 ALL AVAILABLE OPTIONS (uncomment one to use):
-    
-    # OpenAI GPT-5 Options:
-    # return {"provider": "openai", "model": "gpt-5", "reasoning_effort": "high", "verbosity": "medium"}
-    # return {"provider": "openai", "model": "gpt-5-mini", "reasoning_effort": "medium", "verbosity": "medium"}
-    # return {"provider": "openai", "model": "gpt-5-nano", "reasoning_effort": "low", "verbosity": "low"}
-    
-    # Anthropic Claude Options:
-    # return {"provider": "anthropic", "model": "claude-3-5-haiku-20241022"}
-    
-    # Google Gemini Options:
-    # return {"provider": "gemini", "model": "gemini-2.5-flash"}
-    
-    # For faster responses (speed priority):
-    # return {"provider": "openai", "model": "gpt-5-nano", "reasoning_effort": "minimal", "verbosity": "low"}
-    
-    # For highest quality (quality priority):
-    # return {"provider": "openai", "model": "gpt-5", "reasoning_effort": "high", "verbosity": "high"}
 
 # ═══════════════════════════════════════════════════════════════
-# 🔧 PROVIDER CLASSES (No need to change anything below this line)
+# 🔧 EXCEPTIONS AND BASE CLASSES
 # ═══════════════════════════════════════════════════════════════
+
+class ProviderError(Exception):
+    """Raised when an AI provider fails to generate analysis"""
+    def __init__(self, provider_name: str, message: str, original_error: Optional[Exception] = None):
+        self.provider_name = provider_name
+        self.original_error = original_error
+        super().__init__(f"{provider_name}: {message}")
 
 class AIProvider(ABC):
     """Abstract base class for AI providers"""
     
     @abstractmethod
-    def generate_analysis(self, prompt: str) -> Optional[str]:
-        """Generate analysis from the given prompt"""
+    def generate_analysis(self, prompt: str) -> str:
+        """Generate analysis from the given prompt. Raises ProviderError on failure."""
         pass
     
     @abstractmethod
     def get_provider_name(self) -> str:
         """Get the name of this provider"""
         pass
+    
+    def cleanup(self):
+        """Clean up resources (override if needed)"""
+        pass
+
+# ═══════════════════════════════════════════════════════════════
+# 🤖 PROVIDER IMPLEMENTATIONS
+# ═══════════════════════════════════════════════════════════════
 
 class OpenAIProvider(AIProvider):
     """OpenAI API provider implementation with GPT-5 support"""
     
-    def __init__(self, model="gpt-5-mini", reasoning_effort="medium", verbosity="medium"):
+    def __init__(self, config: ProviderConfig):
+        self.config = config
         self.api_key = os.getenv('OPENAI_API_KEY')
         if not self.api_key:
             raise ValueError("OPENAI_API_KEY not found in environment")
-        
-        self.model = model
-        self.reasoning_effort = reasoning_effort
-        self.verbosity = verbosity
         
         self.session = requests.Session()
         self.session.headers.update({
@@ -81,15 +94,15 @@ class OpenAIProvider(AIProvider):
             'Content-Type': 'application/json'
         })
         
-        logger.info(f"OpenAI provider initialized: {self.model} (reasoning: {self.reasoning_effort}, verbosity: {self.verbosity})")
+        logger.info(f"OpenAI provider initialized: {config.model}")
 
-    def generate_analysis(self, prompt: str) -> Optional[str]:
+    def generate_analysis(self, prompt: str) -> str:
         """Generate analysis using OpenAI API"""
         try:
-            logger.info(f"Sending request to OpenAI {self.model}...")
+            logger.info(f"Sending request to OpenAI {self.config.model}...")
             
             data = {
-                "model": self.model,
+                "model": self.config.model,
                 "messages": [
                     {
                         "role": "system",
@@ -104,17 +117,6 @@ FORMATTING REQUIREMENTS:
 - Always include blank lines between sections
 - Use | for tables when showing market data
 
-EXAMPLE OUTPUT STRUCTURE:
-## SECTION 1 - MARKET PERFORMANCE
-- **QQQ** | $569.24 | 🟢 +1.92 (+0.34%)
-- **SPY** | $632.25 | 🔴 -0.53 (-0.08%)
-
-## SECTION 2 - TOP MARKET & ECONOMY STORIES
-
-### 1) Story Headline
-**What happened:** [explanation]
-**Sources:** [attribution]
-
 Provide professional, comprehensive analysis with deep reasoning while maintaining this exact formatting structure."""
                     },
                     {
@@ -122,21 +124,16 @@ Provide professional, comprehensive analysis with deep reasoning while maintaini
                         "content": prompt
                     }
                 ],
-                "max_completion_tokens": 8000  # Increased to allow for reasoning + visible output
+                "max_completion_tokens": 8000
             }
             
-            # GPT-5 models have fixed parameters - only add custom parameters for older models
-            if self.model.startswith('gpt-5'):
-                # GPT-5 specific parameters
-                data["verbosity"] = self.verbosity
-                data["reasoning_effort"] = self.reasoning_effort
-                # Note: temperature and top_p are fixed at default values (1.0) for GPT-5
-                logger.info(f"Using GPT-5 parameters: verbosity={self.verbosity}, reasoning_effort={self.reasoning_effort}")
+            # GPT-5 specific parameters
+            if self.config.model.startswith('gpt-5'):
+                data["verbosity"] = self.config.verbosity
+                data["reasoning_effort"] = self.config.reasoning_effort
             else:
-                # Legacy models (GPT-4, GPT-3.5) support custom temperature/top_p
                 data["temperature"] = 0.7
                 data["top_p"] = 0.9
-                logger.info("Using legacy model parameters: temperature=0.7, top_p=0.9")
             
             response = self.session.post(
                 'https://api.openai.com/v1/chat/completions',
@@ -144,168 +141,65 @@ Provide professional, comprehensive analysis with deep reasoning while maintaini
                 timeout=120
             )
             
-            logger.info(f"OpenAI {self.model} response status: {response.status_code}")
-            
             if response.status_code == 200:
                 result = response.json()
-                
-                # Extract content from standard GPT response format
-                if 'choices' in result and len(result['choices']) > 0:
-                    choice = result['choices'][0]
-                    content = choice['message']['content']
-                    finish_reason = choice.get('finish_reason', 'unknown')
-                    
-                    if not content or not content.strip():
-                        if finish_reason == 'length':
-                            logger.warning(f"OpenAI {self.model} hit token limit. Consider increasing max_completion_tokens or reducing reasoning_effort.")
-                        else:
-                            logger.warning(f"Received empty response from OpenAI {self.model}. Finish reason: {finish_reason}")
-                        return None
-                    
-                    # Log token usage (including reasoning tokens for GPT-5)
-                    usage = result.get('usage', {})
-                    reasoning_tokens = usage.get('completion_tokens_details', {}).get('reasoning_tokens', 0)
-                    visible_tokens = usage.get('completion_tokens', 0) - reasoning_tokens
-                    
-                    logger.info(f"OpenAI {self.model} usage - prompt: {usage.get('prompt_tokens', 0)}, "
-                              f"visible: {visible_tokens}, reasoning: {reasoning_tokens}, "
-                              f"total: {usage.get('total_tokens', 0)}")
-                    
-                    return content
-                else:
-                    logger.error(f"Unexpected response structure from OpenAI {self.model}")
-                    return None
-            else:
-                logger.error(f"OpenAI {self.model} API error: {response.status_code}")
-                try:
-                    error_details = response.json()
-                    logger.error(f"Error details: {error_details}")
-                except:
-                    logger.error(f"Raw error response: {response.text}")
-                return None
-                
-        except requests.exceptions.Timeout:
-            logger.error(f"OpenAI {self.model} API request timed out")
-            return None
-        except requests.exceptions.RequestException as e:
-            logger.error(f"OpenAI {self.model} API network error: {e}")
-            return None
-        except Exception as e:
-            logger.error(f"Unexpected error with OpenAI {self.model} API: {e}")
-            return None
-
-    def get_provider_name(self) -> str:
-        return f"OpenAI {self.model.upper()} ({self.reasoning_effort} reasoning, {self.verbosity} verbosity)"
-
-class AnthropicProvider(AIProvider):
-    """Anthropic Claude API provider implementation"""
-    
-    def __init__(self, model="claude-3-5-haiku-20241022"):
-        self.api_key = os.getenv('ANTHROPIC_API_KEY')
-        if not self.api_key:
-            raise ValueError("ANTHROPIC_API_KEY not found in environment")
-        
-        self.model = model
-        
-        self.session = requests.Session()
-        self.session.headers.update({
-            'x-api-key': self.api_key,
-            'anthropic-version': '2023-06-01',
-            'content-type': 'application/json'
-        })
-        
-        logger.info(f"Anthropic provider initialized: {self.model}")
-
-    def generate_analysis(self, prompt: str) -> Optional[str]:
-        """Generate analysis using Anthropic API"""
-        try:
-            logger.info(f"Sending request to Anthropic {self.model}...")
-            
-            data = {
-                'model': self.model,
-                'messages': [
-                    {
-                        'role': 'user',
-                        'content': prompt
-                    }
-                ],
-                'max_tokens': 4000,
-                'temperature': 0.7
-            }
-            
-            response = self.session.post(
-                'https://api.anthropic.com/v1/messages',
-                json=data,
-                timeout=120
-            )
-            
-            logger.info(f"Anthropic {self.model} response status: {response.status_code}")
-            
-            if response.status_code == 200:
-                result = response.json()
-                content = result['content'][0]['text']
+                content = result.get('choices', [{}])[0].get('message', {}).get('content')
                 
                 if not content or not content.strip():
-                    logger.warning(f"Received empty response from Anthropic {self.model}")
-                    return None
+                    raise ProviderError(
+                        self.get_provider_name(),
+                        "Received empty response from API"
+                    )
                 
+                # Log usage
                 usage = result.get('usage', {})
-                logger.info(f"Anthropic {self.model} usage - input: {usage.get('input_tokens', 0)}, "
-                          f"output: {usage.get('output_tokens', 0)}")
+                logger.info(f"OpenAI usage - total tokens: {usage.get('total_tokens', 0)}")
                 
                 return content
             else:
-                logger.error(f"Anthropic {self.model} API error: {response.status_code}")
-                try:
-                    error_details = response.json()
-                    logger.error(f"Error details: {error_details}")
-                except:
-                    logger.error(f"Raw error response: {response.text}")
-                return None
-                
-        except requests.exceptions.Timeout:
-            logger.error(f"Anthropic {self.model} API request timed out")
-            return None
+                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                raise ProviderError(self.get_provider_name(), error_msg)
+
         except requests.exceptions.RequestException as e:
-            logger.error(f"Anthropic {self.model} API network error: {e}")
-            return None
+            raise ProviderError(self.get_provider_name(), f"Network error: {str(e)}", e)
         except Exception as e:
-            logger.error(f"Unexpected error with Anthropic {self.model} API: {e}")
-            return None
+            if isinstance(e, ProviderError):
+                raise
+            raise ProviderError(self.get_provider_name(), f"Unexpected error: {str(e)}", e)
 
     def get_provider_name(self) -> str:
-        return f"Anthropic {self.model}"
+        return f"OpenAI {self.config.model}"
+    
+    def cleanup(self):
+        if hasattr(self, 'session'):
+            self.session.close()
 
 class GeminiProvider(AIProvider):
     """Google Gemini API provider implementation"""
     
-    def __init__(self, model="gemini-2.5-flash"):
+    def __init__(self, config: ProviderConfig):
+        self.config = config
         self.api_key = os.getenv('GEMINI_API_KEY')
         if not self.api_key:
             raise ValueError("GEMINI_API_KEY not found in environment")
         
-        self.model = model
-        
         self.session = requests.Session()
-        self.session.headers.update({
-            'Content-Type': 'application/json'
-        })
-        
+        self.session.headers.update({'Content-Type': 'application/json'})
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
         
-        logger.info(f"Gemini provider initialized: {self.model}")
+        logger.info(f"Gemini provider initialized: {config.model}")
 
-    def generate_analysis(self, prompt: str) -> Optional[str]:
+    def generate_analysis(self, prompt: str) -> str:
         """Generate analysis using Google Gemini API"""
         try:
-            logger.info(f"Sending request to Google {self.model}...")
+            logger.info(f"Sending request to Gemini {self.config.model}...")
             
             data = {
                 "contents": [
                     {
                         "parts": [
                             {
-                                "text": f"You are a professional financial market analyst. Provide comprehensive analysis with deep reasoning. Make sure to take into account the current time of day for your analysis.\n\n{prompt}"
+                                "text": f"You are a professional financial market analyst. Provide comprehensive analysis with clear structure and reasoning.\n\n{prompt}"
                             }
                         ]
                     }
@@ -316,38 +210,13 @@ class GeminiProvider(AIProvider):
                     "topP": 0.95,
                     "maxOutputTokens": 12000,
                     "candidateCount": 1
-                },
-                "safetySettings": [
-                    {
-                        "category": "HARM_CATEGORY_HARASSMENT",
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_HATE_SPEECH", 
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    },
-                    {
-                        "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                        "threshold": "BLOCK_MEDIUM_AND_ABOVE"
-                    }
-                ]
+                }
             }
             
-            url = f"{self.base_url}/models/{self.model}:generateContent"
+            url = f"{self.base_url}/models/{self.config.model}:generateContent"
             params = {"key": self.api_key}
             
-            response = self.session.post(
-                url,
-                params=params,
-                json=data,
-                timeout=120
-            )
-            
-            logger.info(f"Gemini {self.model} response status: {response.status_code}")
+            response = self.session.post(url, params=params, json=data, timeout=120)
             
             if response.status_code == 200:
                 result = response.json()
@@ -358,127 +227,199 @@ class GeminiProvider(AIProvider):
                         content = candidate['content']['parts'][0].get('text', '')
                         
                         if not content or not content.strip():
-                            logger.warning(f"Received empty response from Gemini {self.model}")
-                            return None
-                        
-                        if 'usageMetadata' in result:
-                            usage = result['usageMetadata']
-                            logger.info(f"Gemini {self.model} usage - prompt: {usage.get('promptTokenCount', 0)}, "
-                                      f"response: {usage.get('candidatesTokenCount', 0)}, "
-                                      f"total: {usage.get('totalTokenCount', 0)}")
+                            raise ProviderError(
+                                self.get_provider_name(),
+                                "Received empty response from API"
+                            )
                         
                         return content
-                    else:
-                        logger.error(f"Unexpected Gemini {self.model} response structure - no content found")
-                        return None
-                else:
-                    logger.error(f"Unexpected Gemini {self.model} response structure - no candidates found")
-                    return None
-            else:
-                logger.error(f"Gemini {self.model} API error: {response.status_code}")
-                try:
-                    error_details = response.json()
-                    logger.error(f"Error details: {error_details}")
-                except:
-                    logger.error(f"Raw error response: {response.text}")
-                return None
                 
-        except requests.exceptions.Timeout:
-            logger.error(f"Gemini {self.model} API request timed out")
-            return None
+                raise ProviderError(self.get_provider_name(), "Unexpected response structure")
+            else:
+                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                raise ProviderError(self.get_provider_name(), error_msg)
+
         except requests.exceptions.RequestException as e:
-            logger.error(f"Gemini {self.model} API network error: {e}")
-            return None
+            raise ProviderError(self.get_provider_name(), f"Network error: {str(e)}", e)
         except Exception as e:
-            logger.error(f"Unexpected error with Gemini {self.model} API: {e}")
-            return None
+            if isinstance(e, ProviderError):
+                raise
+            raise ProviderError(self.get_provider_name(), f"Unexpected error: {str(e)}", e)
 
     def get_provider_name(self) -> str:
-        return f"Google {self.model}"
+        return f"Gemini {self.config.model}"
+    
+    def cleanup(self):
+        if hasattr(self, 'session'):
+            self.session.close()
+
+class AnthropicProvider(AIProvider):
+    """Anthropic Claude API provider implementation"""
+    
+    def __init__(self, config: ProviderConfig):
+        self.config = config
+        self.api_key = os.getenv('ANTHROPIC_API_KEY')
+        if not self.api_key:
+            raise ValueError("ANTHROPIC_API_KEY not found in environment")
+        
+        self.session = requests.Session()
+        self.session.headers.update({
+            'x-api-key': self.api_key,
+            'anthropic-version': '2023-06-01',
+            'content-type': 'application/json'
+        })
+        
+        logger.info(f"Anthropic provider initialized: {config.model}")
+
+    def generate_analysis(self, prompt: str) -> str:
+        """Generate analysis using Anthropic API"""
+        try:
+            logger.info(f"Sending request to Anthropic {self.config.model}...")
+            
+            data = {
+                'model': self.config.model,
+                'messages': [{'role': 'user', 'content': prompt}],
+                'max_tokens': 4000,
+                'temperature': 0.7
+            }
+            
+            response = self.session.post(
+                'https://api.anthropic.com/v1/messages',
+                json=data,
+                timeout=120
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                content = result['content'][0]['text']
+                
+                if not content or not content.strip():
+                    raise ProviderError(
+                        self.get_provider_name(),
+                        "Received empty response from API"
+                    )
+                
+                return content
+            else:
+                error_msg = f"HTTP {response.status_code}: {response.text[:200]}"
+                raise ProviderError(self.get_provider_name(), error_msg)
+
+        except requests.exceptions.RequestException as e:
+            raise ProviderError(self.get_provider_name(), f"Network error: {str(e)}", e)
+        except Exception as e:
+            if isinstance(e, ProviderError):
+                raise
+            raise ProviderError(self.get_provider_name(), f"Unexpected error: {str(e)}", e)
+
+    def get_provider_name(self) -> str:
+        return f"Anthropic {self.config.model}"
+    
+    def cleanup(self):
+        if hasattr(self, 'session'):
+            self.session.close()
+
+# ═══════════════════════════════════════════════════════════════
+# 🧠 AI CLIENT WITH FALLBACK SUPPORT
+# ═══════════════════════════════════════════════════════════════
 
 class AIClient:
     """
-    Main AI client that uses the configured provider
+    Main AI client with automatic fallback support.
+    Tries primary provider first, falls back to secondary on failure.
     """
     
     def __init__(self):
-        self.provider = None
         config = get_ai_config()
+        self.providers: List[AIProvider] = []
         
-        try:
-            if config["provider"] == "openai":
-                if not os.getenv('OPENAI_API_KEY'):
-                    raise ValueError("OPENAI_API_KEY not found in environment")
-                
-                self.provider = OpenAIProvider(
-                    model=config["model"],
-                    reasoning_effort=config.get("reasoning_effort", "medium"),
-                    verbosity=config.get("verbosity", "medium")
-                )
-                
-            elif config["provider"] == "anthropic":
-                if not os.getenv('ANTHROPIC_API_KEY'):
-                    raise ValueError("ANTHROPIC_API_KEY not found in environment")
-                    
-                self.provider = AnthropicProvider(model=config["model"])
-                
-            elif config["provider"] == "gemini":
-                if not os.getenv('GEMINI_API_KEY'):
-                    raise ValueError("GEMINI_API_KEY not found in environment")
-                    
-                self.provider = GeminiProvider(model=config["model"])
-                
-            else:
-                raise ValueError(f"Unknown provider: {config['provider']}")
-                
-            logger.info(f"AI Client initialized with: {self.provider.get_provider_name()}")
-            
-        except Exception as e:
-            logger.error(f"Failed to initialize configured AI provider: {e}")
-            logger.warning("No AI provider available - analysis will be basic")
-            self.provider = None
+        # Initialize providers in order of preference
+        for provider_type in ['primary', 'fallback']:
+            provider_config = config.get(provider_type)
+            if provider_config:
+                try:
+                    provider = self._create_provider(provider_config)
+                    self.providers.append(provider)
+                    logger.info(f"{provider_type.title()} provider ready: {provider.get_provider_name()}")
+                except Exception as e:
+                    logger.error(f"Failed to initialize {provider_type} provider: {e}")
+        
+        if not self.providers:
+            logger.warning("No AI providers available - will use basic analysis only")
+
+    def _create_provider(self, config: ProviderConfig) -> AIProvider:
+        """Factory method to create provider instances"""
+        provider_map = {
+            "openai": OpenAIProvider,
+            "gemini": GeminiProvider,
+            "anthropic": AnthropicProvider
+        }
+        
+        provider_class = provider_map.get(config.provider)
+        if not provider_class:
+            raise ValueError(f"Unknown provider: {config.provider}")
+        
+        return provider_class(config)
 
     def generate_analysis(self, prompt: str) -> tuple[str, str]:
         """
-        Generate analysis using the configured AI provider
+        Generate analysis with automatic fallback.
         
         Returns:
-            Tuple of (analysis_text, provider_name)
+            Tuple of (analysis_text, provider_name_used)
         """
-        if self.provider:
+        # Try each provider in order
+        for i, provider in enumerate(self.providers):
             try:
-                analysis = self.provider.generate_analysis(prompt)
-                if analysis:
-                    return analysis, self.provider.get_provider_name()
-                else:
-                    logger.warning(f"{self.provider.get_provider_name()} returned empty analysis")
-            except Exception as e:
-                logger.error(f"Error with {self.provider.get_provider_name()}: {e}")
+                provider_name = provider.get_provider_name()
+                if i > 0:  # Mark fallback providers
+                    provider_name += " (Fallback)"
+                
+                logger.info(f"Attempting analysis with: {provider.get_provider_name()}")
+                analysis = provider.generate_analysis(prompt)
+                
+                if i > 0:  # Log successful fallback
+                    logger.info(f"Successfully generated analysis using fallback provider")
+                
+                return analysis, provider_name
+                
+            except ProviderError as e:
+                logger.warning(f"Provider failed: {e}")
+                if i == len(self.providers) - 1:  # Last provider failed
+                    logger.error("All AI providers failed")
         
-        # Fallback to basic analysis if AI provider fails
-        logger.warning("AI provider failed - generating basic analysis")
+        # All providers failed - return basic analysis
+        logger.error("Generating basic analysis as final fallback")
         return self._create_basic_analysis(), "Basic Analysis (No AI)"
 
     def _create_basic_analysis(self) -> str:
-        """Create a basic analysis when AI is not available"""
+        """Create a basic analysis when all AI providers fail"""
         from datetime import datetime
         
-        return f"""**MARKET PERFORMANCE**
-{datetime.now().strftime('%B %d, %Y')}
+        return f"""## MARKET ANALYSIS - {datetime.now().strftime('%B %d, %Y')}
 
-**Note:** AI analysis unavailable. Please check API configuration.
+**⚠️ Notice:** AI analysis temporarily unavailable. Please check provider configurations.
 
-**TOP MARKET & ECONOMY STORIES**
-Unable to generate AI-powered analysis. Key market and economic themes 
-require AI integration for comprehensive coverage.
+## SYSTEM STATUS
+- All configured AI providers are currently unavailable
+- This may be due to API key issues, network problems, or service outages
+- Please verify your API keys and network connectivity
 
-**GENERAL NEWS**
-AI analysis required for detailed news categorization and sentiment analysis.
+## RECOMMENDATIONS
+- Check your environment variables for API keys
+- Verify network connectivity to AI provider endpoints
+- Monitor provider status pages for service interruptions
+- Consider configuring additional fallback providers
 
-**Looking Ahead:** 
-Monitor for economic data releases and corporate earnings reports."""
+**Next Steps:** Resolve provider issues to restore full AI-powered analysis capabilities."""
+
+    def get_available_providers(self) -> List[str]:
+        """Get list of successfully initialized provider names"""
+        return [provider.get_provider_name() for provider in self.providers]
 
     def __del__(self):
-        """Clean up sessions when object is destroyed"""
-        if self.provider and hasattr(self.provider, 'session'):
-            self.provider.session.close()
+        """Clean up all provider resources"""
+        for provider in self.providers:
+            try:
+                provider.cleanup()
+            except Exception as e:
+                logger.warning(f"Error cleaning up provider {provider.get_provider_name()}: {e}")
