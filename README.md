@@ -385,21 +385,24 @@ The system automatically runs twice daily via GitHub Actions:
 5. **AI Analysis:** Generates comprehensive intelligence report with fallback support
 6. **Email Delivery:** Sends HTML-formatted report
 
-### Manual Execution
+### Manual Execution (Local Development)
 
-**For testing or local development:**
-```bash
-# Set environment variables (at least one AI provider required)
-export FINNHUB_API_KEY="your_key"
-export GEMINI_API_KEY="your_key"        # Primary provider
-export OPENAI_API_KEY="your_backup_key"  # Optional fallback
-export SENDER_EMAIL="your_email"
-export SENDER_PASSWORD="your_password"
-export RECIPIENT_EMAIL="recipient@email.com"
+For testing or local development, you can use a `.env` file to manage your secrets.
 
-# Run the system
-python market_intelligence_main.py
-```
+1.  **Create a `.env` file:**
+    Copy the provided template:
+    ```bash
+    cp example.env .env
+    ```
+
+2.  **Edit the `.env` file:**
+    Open the `.env` file and fill in your actual API keys and email credentials. The file is already in `.gitignore`, so your secrets will not be committed.
+
+3.  **Run the application:**
+    The script will automatically load the variables from your `.env` file.
+    ```bash
+    python market_intelligence_main.py
+    ```
 
 ### Output Format
 
@@ -414,34 +417,30 @@ python market_intelligence_main.py
 
 ## 🔧 Customization
 
-### Configuring AI Providers
+### AI Provider Configuration (`ai_config.yml`)
 
-**Switch Primary Provider:**
-```python
-# In llm_client.py, modify get_ai_config()
-def get_ai_config():
-    return {
-        "primary": ProviderConfig(
-            provider="gemini",           # Change to preferred provider
-            model="gemini-2.5-flash"
-        ),
-        "fallback": ProviderConfig(
-            provider="openai",
-            model="gpt-5-mini",
-            reasoning_effort="medium"
-        )
-    }
+The AI provider pipeline (which provider to try first, second, etc.) is now managed in the `ai_config.yml` file in the root of the repository. This allows for easy changes without modifying the source code.
+
+**How it works:**
+The system reads the `pipeline` list in order. It will attempt to use the first provider. If that fails, it moves to the second, and so on.
+
+**Example `ai_config.yml`:**
+```yaml
+# The 'pipeline' key should contain a list of provider configurations.
+# The first entry is the primary, the second is the first fallback, and so on.
+pipeline:
+  - provider: "openai"
+    model: "gpt-4o-mini"
+    reasoning_effort: "high"
+
+  - provider: "gemini"
+    model: "gemini-1.5-flash"
+
+  - provider: "anthropic"
+    model: "claude-3-haiku-20240307"
 ```
 
-**Add Third Fallback:**
-```python
-def get_ai_config():
-    return {
-        "primary": ProviderConfig(provider="openai", model="gpt-5-mini"),
-        "fallback": ProviderConfig(provider="gemini", model="gemini-2.5-flash"),
-        "tertiary": ProviderConfig(provider="anthropic", model="claude-3-5-haiku-20241022")
-    }
-```
+To customize, simply edit the `ai_config.yml` file. You can reorder the providers, change models, or remove providers you don't have API keys for.
 
 ### Adding New RSS Feeds
 
@@ -507,12 +506,12 @@ def get_ai_config():
 ### Error Handling & Recovery
 
 **Graceful degradation with detailed context:**
-- Individual feed failures don't stop execution
-- **AI provider failures automatically trigger fallback cascade**
-- **Full error context preserved for debugging**
-- Email delivery errors are logged but don't crash system
-- Environment validation prevents silent failures
-- **Provider performance analytics for optimization**
+- **Failure Notifications:** The GitHub Actions workflow is configured to automatically send an email to the designated recipient if a scheduled run fails. This allows for immediate awareness and faster troubleshooting.
+- **Automated Testing:** A `pytest` suite is run before every deployment to catch regressions and errors early.
+- **Fallback Cascade:** AI provider failures automatically trigger the next provider in the pipeline.
+- **Resilient Feed Parsing:** Individual feed failures are logged but do not stop the entire process.
+- **Environment Validation:** The system checks for required environment variables at startup to prevent configuration-related failures.
+- **Detailed Logging:** Full error context is preserved in logs for easier debugging.
 
 ---
 
@@ -574,19 +573,21 @@ class NewAIProvider(AIProvider):
             raise ProviderError(self.get_provider_name(), f"Error: {e}", e)
 ```
 
-### Testing Approach
+### Automated Testing
 
-**Manual Testing:**
-```bash
-# Test individual components
-python -c "from src.analysis.llm_client import AIClient; c = AIClient(); print(c.get_available_providers())"
+This project uses `pytest` for automated testing. The tests are located in the `tests/` directory and use mocking to ensure they can be run without requiring live API keys or services.
 
-# Test AI provider fallback
-python -c "from src.analysis.llm_client import AIClient; c = AIClient(); result = c.generate_analysis('Test prompt'); print(result[1])"
+**Running Tests:**
+1.  Install the development dependencies:
+    ```bash
+    pip install -r requirements.txt
+    ```
+2.  Run the test suite:
+    ```bash
+    pytest
+    ```
 
-# Validate configuration
-python -c "from src.utils.logging_config import validate_environment; print(validate_environment())"
-```
+The tests are also run automatically by GitHub Actions on every push to the repository. This ensures that new changes do not break existing functionality.
 
 ---
 

@@ -20,10 +20,16 @@ from pathlib import Path
 src_path = Path(__file__).parent / 'src'
 sys.path.insert(0, str(src_path))
 
+from dotenv import load_dotenv
+
 def main():
     """
     Main entry point for the refactored market intelligence system
     """
+    # Load environment variables from .env file for local development
+    # In a production/CI environment, these are set directly
+    load_dotenv()
+
     try:
         # Import the orchestrator
         from src.orchestrator import MarketIntelligenceOrchestrator
