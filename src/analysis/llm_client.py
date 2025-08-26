@@ -8,8 +8,11 @@ from dataclasses import dataclass
 
 logger = logging.getLogger("market_aggregator.ai")
 
+import yaml
+from pathlib import Path
+
 # ═══════════════════════════════════════════════════════════════
-# 🎛️  MODEL CONFIGURATION - CHANGE THIS SECTION TO SWITCH MODELS
+# 🎛️  MODEL CONFIGURATION - NOW IN ai_config.yml
 # ═══════════════════════════════════════════════════════════════
 
 @dataclass
@@ -20,32 +23,25 @@ class ProviderConfig:
     reasoning_effort: str = "medium"  # OpenAI only
     verbosity: str = "medium"         # OpenAI only
 
-def get_ai_config() -> Dict[str, ProviderConfig]:
+def load_ai_config() -> List[Dict]:
     """
-    Model configuration with primary and fallback providers.
-    
-    Returns a dict with 'primary' and 'fallback' keys.
-    Set fallback to None if no fallback is desired.
+    Loads the AI provider pipeline from ai_config.yml
     """
-    
-    # 🟢 PRIMARY PROVIDER (always tried first)
-    primary = ProviderConfig(
-        provider="openai",
-        model="gpt-5-mini",
-        reasoning_effort="medium",
-        verbosity="medium"
-    )
-    
-    # 🟡 FALLBACK PROVIDER (used if primary fails)
-    fallback = ProviderConfig(
-        provider="gemini",
-        model="gemini-2.5-flash"
-    )
-    
-    return {
-        "primary": primary,
-        "fallback": fallback  # Set to None to disable fallback
-    }
+    config_path = Path(__file__).parent.parent.parent / 'ai_config.yml'
+    try:
+        with open(config_path, 'r') as f:
+            config = yaml.safe_load(f)
+
+        if "pipeline" not in config or not isinstance(config["pipeline"], list):
+            raise ValueError("ai_config.yml is missing 'pipeline' list or it's not a list")
+
+        return config["pipeline"]
+    except FileNotFoundError:
+        logger.error(f"Configuration file not found: {config_path}")
+        raise
+    except yaml.YAMLError as e:
+        logger.error(f"Error parsing YAML configuration: {e}")
+        raise
 
 # ═══════════════════════════════════════════════════════════════
 # 🔧 EXCEPTIONS AND BASE CLASSES
@@ -325,26 +321,30 @@ class AnthropicProvider(AIProvider):
 class AIClient:
     """
     Main AI client with automatic fallback support.
-    Tries primary provider first, falls back to secondary on failure.
+    Tries providers from the pipeline in ai_config.yml in order.
     """
     
     def __init__(self):
-        config = get_ai_config()
         self.providers: List[AIProvider] = []
         
-        # Initialize providers in order of preference
-        for provider_type in ['primary', 'fallback']:
-            provider_config = config.get(provider_type)
-            if provider_config:
-                try:
-                    provider = self._create_provider(provider_config)
-                    self.providers.append(provider)
-                    logger.info(f"{provider_type.title()} provider ready: {provider.get_provider_name()}")
-                except Exception as e:
-                    logger.error(f"Failed to initialize {provider_type} provider: {e}")
+        # Load AI provider configuration from YAML file
+        ai_pipeline = load_ai_config()
+
+        # Create and add providers based on the configuration
+        for i, provider_config_dict in enumerate(ai_pipeline):
+            role = "Primary" if i == 0 else f"Fallback {i}"
+            try:
+                # Use ** to unpack dictionary into dataclass fields
+                config = ProviderConfig(**provider_config_dict)
+                provider = self._create_provider(config)
+                self.providers.append(provider)
+                logger.info(f"🤖 {role} provider ready: {provider.get_provider_name()}")
+            except (ValueError, TypeError) as e:
+                # Catch errors from missing keys or bad provider names
+                logger.error(f"Failed to initialize {role} provider with config {provider_config_dict}: {e}")
         
         if not self.providers:
-            logger.warning("No AI providers available - will use basic analysis only")
+            logger.warning("No AI providers were successfully initialized - will use basic analysis only")
 
     def _create_provider(self, config: ProviderConfig) -> AIProvider:
         """Factory method to create provider instances"""
